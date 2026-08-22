@@ -174,7 +174,7 @@ def _upcoming(user: User, db: Session, limit: int = 50) -> list[dict]:
     for alarm in db.scalars(select(Alarm).where(Alarm.user_id == user.id, Alarm.enabled.is_(True))).all():
         at = _next_manual_occurrence(alarm, user, now)
         if at:
-            items.append({"source": "manual", "id": alarm.id, "name": alarm.name, "at": at.isoformat(), "time": at.strftime("%H:%M")})
+            items.append({"source": "manual", "id": alarm.id, "name": alarm.name, "at": at.isoformat(), "date": at.strftime("%d.%m.%Y"), "time": at.strftime("%H:%M")})
     integration = db.scalar(select(WebCommIntegration).where(WebCommIntegration.user_id == user.id, WebCommIntegration.enabled.is_(True)))
     if integration:
         shifts = db.scalars(select(WebCommShift).where(WebCommShift.user_id == user.id, WebCommShift.start > now.astimezone(timezone.utc)).order_by(WebCommShift.start).limit(40)).all()
@@ -183,7 +183,7 @@ def _upcoming(user: User, db: Session, limit: int = 50) -> list[dict]:
             for offset in _offsets(integration.offsets):
                 at = local_start - timedelta(minutes=offset)
                 if at > now:
-                    items.append({"source": "webcomm", "id": shift.id, "name": f"{shift.title} · {offset} min vorher", "at": at.isoformat(), "time": at.strftime("%H:%M"), "shift_start": local_start.isoformat(), "service_number": shift.service_number})
+                    items.append({"source": "webcomm", "id": shift.id, "name": f"{shift.title} · {offset} min vorher", "at": at.isoformat(), "date": at.strftime("%d.%m.%Y"), "time": at.strftime("%H:%M"), "shift_start": local_start.isoformat(), "service_number": shift.service_number})
     items.sort(key=lambda x: x["at"])
     return items[:limit]
 
@@ -216,7 +216,7 @@ def home(request: Request, db: Session = Depends(db_session)):
     if not user:
         return HTMLResponse(_layout("Alarm Hub", "<section><h2>Deine Wecker. Deine Integrationen.</h2><p>Erstelle beliebig viele eigene Wecker. WebComm ist optional und kann als zusätzliche automatische Alarmquelle verbunden werden.</p><div class='row'><a href='/register'>Konto erstellen</a><a href='/login'>Anmelden</a></div></section>"))
     upcoming = _upcoming(user, db, 10)
-    rows = "".join(f"<div class='alarm'><div><b>{x['time']}</b> · {x['name']}<br><span class='muted'>{x['source']}</span></div></div>" for x in upcoming) or "<p class='muted'>Keine kommenden Wecker.</p>"
+    rows = "".join(f"<div class='alarm'><div><b>{x['date']} · {x['time']}</b> · {x['name']}<br><span class='muted'>{x['source']}</span></div></div>" for x in upcoming) or "<p class='muted'>Keine kommenden Wecker.</p>"
     return HTMLResponse(_layout("Dashboard", f"<section><h2>Nächste Wecker</h2>{rows}</section>", user))
 
 
