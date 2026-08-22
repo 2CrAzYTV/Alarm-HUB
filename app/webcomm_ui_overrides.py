@@ -6,8 +6,8 @@ from . import direct_webcomm as dw
 from . import main
 
 
-# Remove the vendor-specific default URL from the WebComm-direct form.
-# Existing saved URLs are still shown; only a fresh/reset configuration starts empty.
+# Remove only the vendor-specific default URL from a fresh/reset WebComm-direct form.
+# Existing saved URLs continue to be displayed normally.
 for route in main.app.routes:
     if getattr(route, "path", None) != "/webcomm-direct":
         continue
@@ -29,10 +29,13 @@ for route in main.app.routes:
 
         old = "https://webcomm.goevb.de/WebComm/default.aspx?TestingCookie=1"
         body = response.body.decode("utf-8").replace(old, "")
+
+        # Do not copy the original Content-Length header. The response body is
+        # shorter after removing the default URL; Starlette must calculate the
+        # new length itself, otherwise the page can fail to render/protocol-error.
         return HTMLResponse(
             content=body,
             status_code=response.status_code,
-            headers=dict(response.headers),
         )
 
     route.endpoint = direct_page_without_default
