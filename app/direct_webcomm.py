@@ -3,8 +3,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import html
+import ipaddress
 import re
 import shlex
+import socket
 import tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -60,15 +62,46 @@ def _decrypt(value: str) -> str:
         raise RuntimeError("Gespeichertes WebComm-Passwort kann nicht entschlüsselt werden. SECRET_KEY wurde möglicherweise geändert.") from exc
 
 
+def _host_addresses(hostname: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    try:
+        infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise RuntimeError(f"WebComm-Hostname konnte nicht aufgelöst werden: {hostname}") from exc
+    addresses = []
+    for info in infos:
+        try:
+            address = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if address not in addresses:
+            addresses.append(address)
+    if not addresses:
+        raise RuntimeError(f"Für den WebComm-Hostname wurde keine IP-Adresse gefunden: {hostname}")
+    return addresses
+
+
+def _assert_public_host(hostname: str) -> None:
+    normalized = hostname.rstrip(".").casefold()
+    if normalized in {"localhost", "localhost.localdomain"} or normalized.endswith(".local"):
+        raise RuntimeError("Lokale oder interne WebComm-Adressen sind für den Direktimport nicht zugelassen.")
+    for address in _host_addresses(normalized):
+        if address.is_private or address.is_loopback or address.is_link_local or address.is_multicast or address.is_reserved or address.is_unspecified:
+            raise RuntimeError("Die WebComm-Adresse verweist auf ein internes oder nicht öffentlich routbares Netzwerk und wurde blockiert.")
+
+
 def _validate_url(value: str) -> str:
     value = value.strip()
+    if len(value) > 500:
+        raise HTTPException(400, "WebComm-URL ist zu lang.")
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.hostname:
         raise HTTPException(400, "WebComm-URL muss eine vollständige HTTPS-Adresse sein.")
-    # Alarm-HUB may become internet-facing. Restrict direct browser access to the known WebComm host
-    # instead of allowing arbitrary user-controlled URLs into the server's internal network.
-    if parsed.hostname.casefold() != "webcomm.goevb.de":
-        raise HTTPException(400, "Direkter Import ist derzeit aus Sicherheitsgründen auf webcomm.goevb.de beschränkt.")
+    if parsed.username or parsed.password:
+        raise HTTPException(400, "Benutzername und Passwort gehören nicht in die WebComm-URL.")
+    try:
+        _assert_public_host(parsed.hostname)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
     return value
 
 
@@ -153,6 +186,66 @@ async def _visible(items):
     return None
 
 
+async def _guard_browser_requests(route) -> None:
+    parsed = urlparse(route.request.url)
+    if parsed.scheme in {"http", "https"} and parsed.hostname:
+        try:
+            _assert_public_host(parsed.hostname)
+        except RuntimeError:
+            await route.abort()
+            return
+    await route.continue_()
+
+
+async def _verify_webcomm_start_page(page) -> tuple[object, object, object]:
+    await page.wait_for_timeout(250)
+    final = urlparse(page.url)
+    if final.scheme != "https" or not final.hostname:
+        raise RuntimeError("Die WebComm-Startseite hat auf eine ungültige oder unverschlüsselte Adresse weitergeleitet.")
+    _assert_public_host(final.hostname)
+
+    body_text = (await page.locator("body").inner_text(timeout=10000)).casefold()
+    title = (await page.title()).casefold()
+    username_marker = "benutzerkennung" in body_text or "benutzername" in body_text
+    password_marker = "kennwort" in body_text or "passwort" in body_text
+    login_marker = "anmelden" in body_text or "login" in body_text
+    webcomm_marker = "webcomm" in body_text or "webcomm" in title
+
+    user_input = await _visible([
+        page.locator('input[name*="user" i]'),
+        page.locator('input[id*="user" i]'),
+        page.locator('input[type="text"]'),
+    ])
+    pass_input = await _visible([page.locator('input[type="password"]')])
+    login = await _visible([
+        page.get_by_role("button", name="Anmelden"),
+        page.get_by_role("button", name="Login"),
+        page.locator('input[type="submit"]'),
+        page.locator('button[type="submit"]'),
+    ])
+
+    if not (webcomm_marker and username_marker and password_marker and login_marker and user_input and pass_input and login):
+        raise RuntimeError(
+            "Die angegebene Startseite wurde nicht als WebComm-Anmeldung erkannt. Erwartet werden WebComm sowie Benutzerkennung/Benutzername, Kennwort/Passwort und Anmelden/Login."
+        )
+    return user_input, pass_input, login
+
+
+async def _check_start_page(url: str) -> None:
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=shlex.split("--no-sandbox --disable-dev-shm-usage"))
+        try:
+            context = await browser.new_context(viewport={"width": 1280, "height": 900})
+            await context.route("**/*", _guard_browser_requests)
+            page = await context.new_page()
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            if response is not None and not response.ok:
+                raise RuntimeError(f"WebComm-Startseite antwortet mit HTTP {response.status}.")
+            await _verify_webcomm_start_page(page)
+        finally:
+            await browser.close()
+
+
 async def _click(page, purpose: str):
     choices = {
         "duty_plan": [
@@ -186,23 +279,14 @@ async def _fetch_pdf(url: str, username: str, password: str, output: Path, month
         browser = await p.chromium.launch(headless=True, args=shlex.split("--no-sandbox --disable-dev-shm-usage"))
         try:
             context = await browser.new_context(accept_downloads=True, viewport={"width": 1920, "height": 1080})
+            await context.route("**/*", _guard_browser_requests)
             page = await context.new_page()
-            await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-            user_input = await _visible([
-                page.locator('input[name*="user" i]'), page.locator('input[id*="user" i]'),
-                page.locator('input[type="text"]'),
-            ])
-            pass_input = await _visible([page.locator('input[type="password"]')])
-            if not user_input or not pass_input:
-                raise RuntimeError("WebComm-Loginfelder wurden nicht gefunden.")
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            if response is not None and not response.ok:
+                raise RuntimeError(f"WebComm-Startseite antwortet mit HTTP {response.status}.")
+            user_input, pass_input, login = await _verify_webcomm_start_page(page)
             await user_input.fill(username)
             await pass_input.fill(password)
-            login = await _visible([
-                page.get_by_role("button", name="Anmelden"), page.get_by_role("button", name="Login"),
-                page.locator('input[type="submit"]'), page.locator('button[type="submit"]'),
-            ])
-            if not login:
-                raise RuntimeError("WebComm-Anmeldebutton wurde nicht gefunden.")
             await login.click()
             await page.wait_for_load_state("domcontentloaded")
             await _click(page, "duty_plan")
@@ -238,6 +322,10 @@ async def _fetch_pdf(url: str, username: str, password: str, output: Path, month
             if not href:
                 raise RuntimeError("WebComm-Drucklink enthält keine URL.")
             print_url = urljoin(page.url, href)
+            parsed_print = urlparse(print_url)
+            if parsed_print.scheme != "https" or not parsed_print.hostname:
+                raise RuntimeError("WebComm-Druckansicht verwendet keine gültige HTTPS-Adresse.")
+            _assert_public_host(parsed_print.hostname)
             response = await context.request.get(print_url, timeout=45000)
             if not response.ok:
                 raise RuntimeError(f"WebComm-Druckansicht antwortet mit HTTP {response.status}.")
@@ -325,18 +413,20 @@ def direct_page(request: Request, user: main.User = Depends(main.current_user), 
     last_sync = cred.last_sync_at.astimezone(tz).strftime("%d.%m.%Y %H:%M:%S") if cred and cred.last_sync_at else "noch nie"
     error = f"<p class='muted'><b>Letzter Fehler:</b> {html.escape(cred.last_error)}</p>" if cred and cred.last_error else ""
     saved = "✓ Zugangsdaten gespeichert" if cred else "noch nicht eingerichtet"
+    verified = "<p><b>Startseitenprüfung:</b> ✓ WebComm-Anmeldung erkannt und URL gespeichert.</p>" if request.query_params.get("verified") == "1" else ""
     body = f"""
     <section>
       <h2>Direkter WebComm-Import</h2>
       <p>Diese Variante ist für Benutzer gedacht, die <b>WebComm Calendar Sync nicht verwenden</b>. Alarm-HUB meldet sich selbst bei WebComm an und importiert den aktuellen und den folgenden Monat.</p>
-      <p class='muted'>Das Passwort wird verschlüsselt in PostgreSQL gespeichert und nie wieder im Klartext angezeigt. Der direkte Browserzugriff ist aus Sicherheitsgründen auf webcomm.goevb.de beschränkt.</p>
+      <p class='muted'>Das Passwort wird verschlüsselt in PostgreSQL gespeichert und nie wieder im Klartext angezeigt. Die Domain ist nicht fest vorgegeben: Beim Speichern prüft Alarm-HUB die HTTPS-Startseite auf eine echte WebComm-Anmeldung mit WebComm, Benutzerkennung/Benutzername, Kennwort/Passwort und Anmelden/Login. Interne und lokal geroutete Ziele bleiben aus Sicherheitsgründen blockiert.</p>
+      {verified}
       <p><b>Status:</b> {saved} · <b>Letzter Import:</b> {last_sync}</p>{error}
       <form method='post' action='/webcomm-direct/save'>
         <input type='hidden' name='csrf' value='{token}'>
         <label>WebComm URL<input name='url' value='{url}' required></label>
         <label>WebComm Benutzername<input name='username' value='{username}' autocomplete='username' required></label>
         <label>WebComm Passwort<input type='password' name='password' autocomplete='current-password' placeholder='{'gespeichert – leer lassen zum Beibehalten' if cred else 'Passwort'}'></label>
-        <button>Zugangsdaten speichern</button>
+        <button>Startseite prüfen &amp; Zugangsdaten speichern</button>
       </form>
     </section>
     <section>
@@ -350,12 +440,19 @@ def direct_page(request: Request, user: main.User = Depends(main.current_user), 
 
 
 @main.app.post("/webcomm-direct/save")
-def direct_save(request: Request, url: str = Form(...), username: str = Form(...), password: str = Form(""), csrf: str = Form(...), user: main.User = Depends(main.current_user), db: Session = Depends(main.db_session)):
+async def direct_save(request: Request, url: str = Form(...), username: str = Form(...), password: str = Form(""), csrf: str = Form(...), user: main.User = Depends(main.current_user), db: Session = Depends(main.db_session)):
     main._check_csrf(request, csrf)
     url = _validate_url(url)
     username = username.strip()
     if not username:
         raise HTTPException(400, "WebComm-Benutzername fehlt.")
+
+    try:
+        await _check_start_page(url)
+    except Exception as exc:
+        body = f"<section><h2>WebComm-Startseite nicht erkannt</h2><p>{html.escape(str(exc))}</p><p>Die Zugangsdaten wurden nicht gespeichert.</p><p><a href='/webcomm-direct'>Zurück</a></p></section>"
+        return HTMLResponse(main._layout("WebComm direkt", body, user), status_code=400)
+
     cred = db.scalar(select(DirectWebCommCredential).where(DirectWebCommCredential.user_id == user.id))
     if not cred:
         if not password:
@@ -368,7 +465,7 @@ def direct_save(request: Request, url: str = Form(...), username: str = Form(...
         if password:
             cred.password_encrypted = _encrypt(password)
     db.commit()
-    return RedirectResponse("/webcomm-direct", 303)
+    return RedirectResponse("/webcomm-direct?verified=1", 303)
 
 
 @main.app.post("/webcomm-direct/sync", response_class=HTMLResponse)
@@ -378,6 +475,8 @@ async def direct_sync(request: Request, csrf: str = Form(...), user: main.User =
     if not cred:
         raise HTTPException(400, "Bitte zuerst WebComm-Zugangsdaten speichern.")
     try:
+        validated_url = _validate_url(cred.url)
+        await _check_start_page(validated_url)
         imported = await import_direct(user, cred, db)
     except Exception as exc:
         db.rollback()
