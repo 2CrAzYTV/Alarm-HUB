@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Alarm-HUB-Postgres</Name>
+  <Repository>postgres:17-alpine</Repository>
+  <Registry>https://hub.docker.com/_/postgres</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/2CrAzYTV/Alarm-HUB</Support>
+  <Project>https://github.com/2CrAzYTV/Alarm-HUB</Project>
+  <Overview>PostgreSQL-Datenbank für Alarm-HUB. Dieses Template ist für die Nutzung ohne .env-Datei vorgesehen.</Overview>
+  <Category>Tools:</Category>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <Requires>Alarm-HUB verwendet standardmäßig den Hostnamen alarm-hub-db. Beide Container sollten im selben benutzerdefinierten Docker-Netzwerk betrieben werden.</Requires>
+  <Config Name="Appdata" Target="/var/lib/postgresql/data" Default="/mnt/cache/appdata/alarm-hub-postgres" Mode="rw" Description="Persistente PostgreSQL-Daten" Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/appdata/alarm-hub-postgres</Config>
+  <Config Name="Database" Target="POSTGRES_DB" Default="alarmhub" Mode="" Description="Datenbankname" Type="Variable" Display="always" Required="true" Mask="false">alarmhub</Config>
+  <Config Name="User" Target="POSTGRES_USER" Default="alarmhub" Mode="" Description="PostgreSQL-Benutzer" Type="Variable" Display="always" Required="true" Mask="false">alarmhub</Config>
+  <Config Name="Password" Target="POSTGRES_PASSWORD" Default="" Mode="" Description="Langes zufälliges Datenbankpasswort. Dasselbe Passwort muss in der DATABASE_URL des Alarm-HUB-Containers verwendet werden." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+</Container>
