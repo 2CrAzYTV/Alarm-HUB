@@ -12,19 +12,38 @@ Alarm Hub is a standalone multi-user alarm service. Manual alarms are the core f
 - PostgreSQL backend
 - Docker deployment behind a reverse proxy
 
+## Configuration principle
+Alarm Hub does **not** use a `.env` file. Runtime configuration should be provided directly through the Docker/Unraid template wherever possible.
+
+The included Unraid template is located at:
+
+```text
+unraid/alarm-hub.xml
+```
+
+It contains the relevant container settings and environment variables, including the WebUI port, database connection, application secret, timezone and secure-session setting.
+
 ## Architecture
 Alarm Hub never needs direct access to a private WebComm instance. WebComm pushes shift data outbound to Alarm Hub using a per-user token.
 
-## Quick start
-```bash
-cp .env.example .env
-docker compose up -d --build
+## Docker
+The application image listens on port `8080`. For Unraid, use the included template. For another Docker host, pass the required environment variables directly to the container or through your orchestration platform rather than using a `.env` file.
+
+Required runtime settings:
+
+```text
+DATABASE_URL
+SECRET_KEY
 ```
 
-Open `http://localhost:8080` locally. For public deployment, place Alarm Hub behind a reverse proxy with a valid public HTTPS certificate.
+Optional/defaulted settings:
 
-## Environment
-See `.env.example`.
+```text
+DEFAULT_TIMEZONE=Europe/Berlin
+SESSION_HTTPS_ONLY=true
+```
+
+For public deployment, place Alarm Hub behind a reverse proxy with a valid public HTTPS certificate and keep `SESSION_HTTPS_ONLY=true`.
 
 ## WebComm integration
 A logged-in user creates an integration token on the Integrations page. WebComm can then POST future shifts to `/api/v1/integrations/webcomm/shifts` with `Authorization: Bearer <token>`.
