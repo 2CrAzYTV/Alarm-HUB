@@ -70,7 +70,6 @@ async def _run_scheduled_imports() -> None:
         db.close()
 
 
-# Extend the existing FastAPI lifespan so the scheduler starts with Alarm-HUB.
 _original_lifespan = main.app.router.lifespan_context
 
 
@@ -90,7 +89,6 @@ async def _lifespan(app):
 main.app.router.lifespan_context = _lifespan
 
 
-# Add a dedicated management entry for both API and direct-import users.
 _original_layout = main._layout
 
 
@@ -124,8 +122,12 @@ def webcomm_data_page(request: Request, user: main.User = Depends(main.current_u
     interval = schedule.interval_minutes if schedule else 30
     start = schedule.window_start if schedule else "07:00"
     end = schedule.window_end if schedule else "18:00"
+    reset_note = ""
+    if request.query_params.get("reset") == "1":
+        reset_note = "<p><b>✓ WebComm-Daten und Direktimport-Konfiguration wurden zurückgesetzt.</b></p>"
     body = f"""
     <section><h2>Status</h2>
+      {reset_note}
       <p><b>Aktuelle Quelle:</b> {source}</p>
       <p><b>Gespeicherte WebComm-Schichten:</b> {len(shifts)} · API: {api_count} · Direkt: {direct_count}</p>
       <p><b>Integration/API:</b> {'aktiviert' if integration and integration.enabled else 'nicht aktiviert'} · <b>Direkt-Zugangsdaten:</b> {'vorhanden' if cred else 'nicht vorhanden'}</p>
@@ -141,8 +143,9 @@ def webcomm_data_page(request: Request, user: main.User = Depends(main.current_u
       </form>
     </section>
     <section><h2>WebComm-Daten zurücksetzen</h2>
-      <p>Löscht ausschließlich die importierten WebComm-Schichten und damit die daraus erzeugten Wecker. Integrationstoken, Direkt-Zugangsdaten und manuelle Wecker bleiben erhalten.</p>
-      <form method='post' action='/webcomm-data/reset'><input type='hidden' name='csrf' value='{token}'><button class='danger'>WebComm-Daten löschen / resetten</button></form>
+      <p>Löscht alle importierten WebComm-Schichten und damit die daraus erzeugten Wecker. Zusätzlich werden beim Direktimport die gespeicherte WebComm-URL, Benutzername, verschlüsseltes Passwort, letzter Import/Fehler sowie die Direktimport-Automatik vollständig entfernt.</p>
+      <p class='muted'>Manuelle Wecker, Geräte-Tokens und das Integrationstoken für WebComm-Calendar-Sync bleiben erhalten.</p>
+      <form method='post' action='/webcomm-data/reset'><input type='hidden' name='csrf' value='{token}'><button class='danger'>WebComm vollständig zurücksetzen</button></form>
     </section>
     """
     return HTMLResponse(main._layout("WebComm-Daten", body, user))
@@ -172,6 +175,12 @@ def save_schedule(request: Request, enabled: str | None = Form(None), interval_m
 @main.app.post("/webcomm-data/reset")
 def reset_webcomm_data(request: Request, csrf: str = Form(...), user: main.User = Depends(main.current_user), db: Session = Depends(main.db_session)):
     main._check_csrf(request, csrf)
-    deleted = db.query(main.WebCommShift).filter(main.WebCommShift.user_id == user.id).delete()
+
+    db.query(main.WebCommShift).filter(main.WebCommShift.user_id == user.id).delete(synchronize_session=False)
+    db.query(DirectWebCommSchedule).filter(DirectWebCommSchedule.user_id == user.id).delete(synchronize_session=False)
+    db.query(dw.DirectWebCommCredential).filter(dw.DirectWebCommCredential.user_id == user.id).delete(synchronize_session=False)
+
+    # The push integration itself is intentionally kept. This lets users of
+    # WebComm-Calendar-Sync reset imported data without having to create a new token.
     db.commit()
-    return RedirectResponse(f"/webcomm-data?reset={deleted}", 303)
+    return RedirectResponse("/webcomm-data?reset=1", 303)
