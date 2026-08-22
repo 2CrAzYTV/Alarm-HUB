@@ -311,7 +311,27 @@ def integrations_page(request: Request, user: User = Depends(current_user), db: 
     integration = db.scalar(select(WebCommIntegration).where(WebCommIntegration.user_id == user.id))
     offsets = integration.offsets if integration else "120,90"
     state = "aktiviert" if integration and integration.enabled else "nicht aktiviert"
-    body = f"<section><h2>WebComm (optional)</h2><p>WebComm ist nur eine zusätzliche automatische Alarmquelle. Deine manuellen Wecker funktionieren unabhängig davon.</p><p>Status: <b>{state}</b></p><form method='post' action='/integrations/webcomm'><input type='hidden' name='csrf' value='{token}'><label>Vorlaufzeiten in Minuten<input name='offsets' value='{offsets}' placeholder='120,90,45'></label><button>WebComm aktivieren / Token neu erzeugen</button></form><p class='muted'>Das neue Token wird nur einmal nach dem Erzeugen angezeigt.</p></section>"
+    tz = ZoneInfo(user.timezone or DEFAULT_TZ)
+    now_utc = datetime.now(timezone.utc)
+    shifts = db.scalars(select(WebCommShift).where(WebCommShift.user_id == user.id).order_by(WebCommShift.start)).all()
+    future_shifts = [shift for shift in shifts if shift.start > now_utc]
+    next_shift = future_shifts[0] if future_shifts else None
+    next_shift_text = "keine zukünftige Schicht importiert"
+    if next_shift:
+        local_start = next_shift.start.astimezone(tz)
+        next_shift_text = f"{local_start.strftime('%d.%m.%Y %H:%M')} · {next_shift.title}"
+    upcoming_webcomm = [item for item in _upcoming(user, db, 200) if item.get("source") == "webcomm"]
+    last_sync_text = "noch kein erfolgreicher Sync"
+    if integration and shifts:
+        last_sync_text = integration.updated_at.astimezone(tz).strftime("%d.%m.%Y %H:%M:%S")
+    status_box = (
+        "<div class='card'><h3>WebComm-Syncstatus</h3>"
+        f"<p><b>Letzter Sync:</b> {last_sync_text}</p>"
+        f"<p><b>Importierte Schichten:</b> {len(shifts)}</p>"
+        f"<p><b>Nächste Schicht:</b> {next_shift_text}</p>"
+        f"<p><b>Erzeugte kommende Wecker:</b> {len(upcoming_webcomm)}</p></div>"
+    )
+    body = f"<section><h2>WebComm (optional)</h2><p>WebComm ist nur eine zusätzliche automatische Alarmquelle. Deine manuellen Wecker funktionieren unabhängig davon.</p><p>Status: <b>{state}</b></p>{status_box}<form method='post' action='/integrations/webcomm'><input type='hidden' name='csrf' value='{token}'><label>Vorlaufzeiten in Minuten<input name='offsets' value='{offsets}' placeholder='120,90,45'></label><button>WebComm aktivieren / Token neu erzeugen</button></form><p class='muted'>Das neue Token wird nur einmal nach dem Erzeugen angezeigt.</p></section>"
     return HTMLResponse(_layout("Integrationen", body, user))
 
 
@@ -336,7 +356,12 @@ def configure_webcomm(request: Request, offsets: str = Form("120,90"), csrf: str
 def devices_page(request: Request, user: User = Depends(current_user), db: Session = Depends(db_session)):
     token = _csrf(request)
     devices = db.scalars(select(DeviceToken).where(DeviceToken.user_id == user.id).order_by(DeviceToken.created_at.desc())).all()
-    rows = "".join(f"<div class='alarm'><div><b>{d.name}</b><br><span class='muted'>erstellt {d.created_at.isoformat()}</span></div></div>" for d in devices) or "<p class='muted'>Noch keine Geräte-Tokens.</p>"
+    rows = "".join(
+        f"<div class='alarm'><div><b>{d.name}</b><br><span class='muted'>erstellt {d.created_at.isoformat()}"
+        f"{' · zuletzt benutzt '+d.last_used_at.isoformat() if d.last_used_at else ' · noch nie benutzt'}</span></div>"
+        f"<form method='post' action='/devices/{d.id}/delete'><input type='hidden' name='csrf' value='{token}'><button class='danger'>Token löschen</button></form></div>"
+        for d in devices
+    ) or "<p class='muted'>Noch keine Geräte-Tokens.</p>"
     body = f"<section><h2>Geräte-Token erstellen</h2><form method='post' action='/devices'><input type='hidden' name='csrf' value='{token}'><label>Name<input name='name' placeholder='z. B. iPhone' required></label><button>Token erzeugen</button></form><p class='muted'>Das Token wird nur einmal vollständig angezeigt.</p></section><section><h2>Vorhandene Geräte</h2>{rows}</section>"
     return HTMLResponse(_layout("Geräte / API", body, user))
 
@@ -349,6 +374,17 @@ def create_device(request: Request, name: str = Form(...), csrf: str = Form(...)
     db.commit()
     body = f"<section><h2>Geräte-Token erstellt</h2><p>Dieses Token wird nur jetzt angezeigt:</p><p><code>{raw}</code></p><p>Nutze es als <code>Authorization: Bearer …</code> für <code>/api/v1/me/upcoming</code>.</p><a href='/devices'>Zurück</a></section>"
     return HTMLResponse(_layout("Geräte-Token", body, user))
+
+
+@app.post("/devices/{device_id}/delete")
+def delete_device_token(device_id: int, request: Request, csrf: str = Form(...), user: User = Depends(current_user), db: Session = Depends(db_session)):
+    _check_csrf(request, csrf)
+    device = db.scalar(select(DeviceToken).where(DeviceToken.id == device_id, DeviceToken.user_id == user.id))
+    if not device:
+        raise HTTPException(404, "Geräte-Token nicht gefunden.")
+    db.delete(device)
+    db.commit()
+    return RedirectResponse("/devices", 303)
 
 
 @app.get("/api/v1/me/upcoming")
@@ -381,5 +417,8 @@ async def webcomm_sync(request: Request, authorization: str | None = Header(defa
             continue
         db.add(WebCommShift(user_id=user.id, external_uid=str(item.get("uid") or f"{item.get('day')}-{item.get('service_number')}-{start.isoformat()}")[:255], title=str(item.get("title") or "Schicht")[:160], service_number=str(item.get("service_number"))[:64] if item.get("service_number") is not None else None, start=start.astimezone(timezone.utc), end=end.astimezone(timezone.utc) if end else None, start_location=str(item.get("start_location"))[:160] if item.get("start_location") else None, end_location=str(item.get("end_location"))[:160] if item.get("end_location") else None))
         imported += 1
+    integration = db.scalar(select(WebCommIntegration).where(WebCommIntegration.user_id == user.id))
+    if integration:
+        integration.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True, "imported": imported}
