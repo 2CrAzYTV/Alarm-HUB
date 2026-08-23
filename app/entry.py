@@ -8,5 +8,6 @@ from . import webcomm_ui_overrides  # noqa: F401
 from . import alarms_ui_overrides  # noqa: F401
 from . import ui_theme  # noqa: F401
 from . import guides_dropdown  # noqa: F401
+from . import nav_dashboard  # noqa: F401
 
 app = main.app
