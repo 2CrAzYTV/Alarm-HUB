@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>Alarm-HUB</Name>
+  <Repository>ghcr.io/2crazytv/alarm-hub:latest</Repository>
+  <Registry>https://ghcr.io/2crazytv/alarm-hub</Registry>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Icon>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/icon.svg</Icon>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <Overview>Alarm-HUB is a standalone multi-user alarm service with manual alarms, mobile API access, optional WebComm Calendar Sync integration, and optional direct WebComm import. PostgreSQL is embedded by default, so a normal Unraid installation requires only one container. Persistent application and database data are stored below /config.</Overview>
+  <Support>https://github.com/2CrAzYTV/Alarm-HUB/issues</Support>
+  <Project>https://github.com/2CrAzYTV/Alarm-HUB</Project>
+  <TemplateURL>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/templates/alarm-hub.xml</TemplateURL>
+  <ReadMe>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/README.md</ReadMe>
+  <Category>Tools:</Category>
+  <ExtraSearchTerms>alarm alarms wecker webcomm schedule shortcut ios automation</ExtraSearchTerms>
+  <Requires>No separate PostgreSQL container is required for the default embedded database mode. For public Internet access, use a reverse proxy with a valid HTTPS certificate.</Requires>
+  <Changes>Initial Community Apps release candidate with embedded PostgreSQL, persistent /config storage, external PostgreSQL advanced mode, WebComm integration, and direct WebComm import.</Changes>
+  <Date>2026-08-23</Date>
+  <MinVer>6.12</MinVer>
+  <License>MIT</License>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="HTTP port for the Alarm-HUB WebUI." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Appdata" Target="/config" Default="/mnt/user/appdata/alarm-hub" Mode="rw" Description="Persistent Alarm-HUB data, including the embedded PostgreSQL database and generated application secret." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/alarm-hub</Config>
+  <Config Name="Database Mode" Target="DATABASE_MODE" Default="embedded" Mode="" Description="embedded = integrated PostgreSQL database (recommended); external = use your own PostgreSQL server." Type="Variable" Display="advanced" Required="true" Mask="false">embedded</Config>
+  <Config Name="External Database URL" Target="DATABASE_URL" Default="" Mode="" Description="Only required for DATABASE_MODE=external. Example: postgresql+psycopg://user:password@host:5432/database" Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="Secret Key" Target="SECRET_KEY" Default="" Mode="" Description="Optional in embedded mode: when left empty Alarm-HUB creates and persists a strong secret under /config. Set and keep a fixed value for external/managed deployments if desired." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="Default Timezone" Target="DEFAULT_TIMEZONE" Default="Europe/Berlin" Mode="" Description="Default timezone for new users." Type="Variable" Display="advanced" Required="true" Mask="false">Europe/Berlin</Config>
+  <Config Name="Secure Session Cookies" Target="SESSION_HTTPS_ONLY" Default="true" Mode="" Description="Use true behind HTTPS. Set false only for a local HTTP-only test installation." Type="Variable" Display="advanced" Required="true" Mask="false">true</Config>
+</Container>
