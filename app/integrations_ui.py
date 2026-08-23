@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, Form, HTTPException, Request
@@ -46,7 +47,8 @@ def integrations_page_fixed(
 
     saved_note = ""
     if request.query_params.get("saved") == "1":
-        saved_note = "<p><b>✓ Vorlaufzeiten gespeichert.</b></p>"
+        saved_value = request.query_params.get("offsets") or offsets
+        saved_note = f"<p><b>✓ Vorlaufzeiten gespeichert: {saved_value} Minuten.</b></p>"
 
     status_box = (
         "<div class='card'><h3>WebComm-Syncstatus</h3>"
@@ -67,12 +69,13 @@ def integrations_page_fixed(
         <h3>Vorlaufzeiten</h3>
         {saved_note}
         <p class='muted'>Diese Werte bestimmen, wie viele Minuten vor einer WebComm-Schicht ein Wecker erzeugt wird.</p>
+        <p><b>Aktuell gespeichert:</b> {offsets} Minuten</p>
         <form method='post' action='/integrations/webcomm/offsets'>
           <input type='hidden' name='csrf' value='{token}'>
           <label>Vorlaufzeiten in Minuten
-            <input name='offsets' value='{offsets}' placeholder='120,90,45'>
+            <input name='offsets' value='{offsets}' placeholder='120,90,45' required>
           </label>
-          <button>Vorlaufzeiten speichern</button>
+          <button type='submit'>Vorlaufzeiten speichern</button>
         </form>
       </div>
 
@@ -82,7 +85,7 @@ def integrations_page_fixed(
         <form method='post' action='/integrations/webcomm'>
           <input type='hidden' name='csrf' value='{token}'>
           <input type='hidden' name='offsets' value='{offsets}'>
-          <button>Token neu erzeugen</button>
+          <button type='submit'>Token neu erzeugen</button>
         </form>
         <p class='muted'>Das neue Token wird nur einmal nach dem Erzeugen angezeigt.</p>
       </div>
@@ -94,7 +97,7 @@ def integrations_page_fixed(
 @main.app.post("/integrations/webcomm/offsets")
 def save_webcomm_offsets(
     request: Request,
-    offsets: str = Form("120,90"),
+    offsets: str = Form(...),
     csrf: str = Form(...),
     user: main.User = Depends(main.current_user),
     db: Session = Depends(main.db_session),
@@ -104,6 +107,7 @@ def save_webcomm_offsets(
     if not parsed:
         raise HTTPException(400, "Mindestens eine gültige Vorlaufzeit erforderlich.")
 
+    normalized = ",".join(str(value) for value in parsed)
     integration = db.scalar(
         select(main.WebCommIntegration).where(main.WebCommIntegration.user_id == user.id)
     )
@@ -111,10 +115,19 @@ def save_webcomm_offsets(
         integration = main.WebCommIntegration(user_id=user.id, enabled=True)
         db.add(integration)
 
-    integration.offsets = ",".join(str(value) for value in parsed)
+    integration.offsets = normalized
     integration.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return RedirectResponse("/integrations?saved=1", 303)
+    db.refresh(integration)
+
+    # Verify that the persisted value is exactly what we intended to save.
+    if integration.offsets != normalized:
+        raise HTTPException(500, "Vorlaufzeiten konnten nicht dauerhaft gespeichert werden.")
+
+    return RedirectResponse(
+        f"/integrations?saved=1&offsets={quote(normalized)}",
+        303,
+    )
 
 
 def _install_override() -> None:
