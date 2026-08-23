@@ -7,6 +7,7 @@ on:
       - 'templates/**.xml'
       - 'unraid/**.xml'
       - 'icon.svg'
+      - 'icon.png'
       - 'README.md'
       - 'LICENSE'
       - '.github/workflows/community-apps.yml'
@@ -16,6 +17,7 @@ on:
       - 'templates/**.xml'
       - 'unraid/**.xml'
       - 'icon.svg'
+      - 'icon.png'
       - 'README.md'
       - 'LICENSE'
       - '.github/workflows/community-apps.yml'
@@ -39,12 +41,15 @@ jobs:
         run: |
           set -euo pipefail
           template='templates/alarm-hub.xml'
+          icon_url='https://github.com/2CrAzYTV/Alarm-HUB/raw/refs/heads/main/icon.png'
           for tag in Name Repository Registry Icon WebUI Overview Project TemplateURL ReadMe Category License; do
             grep -q "<$tag>" "$template" || { echo "Missing <$tag> in $template"; exit 1; }
           done
           grep -q '<CommunityApplications>' ca_profile.xml
           grep -q 'https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/templates/alarm-hub.xml' "$template"
-          grep -q 'https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/icon.svg' "$template"
+          grep -q "$icon_url" "$template"
+          grep -q "$icon_url" ca_profile.xml
+          test -s icon.png
 
       - name: Check for forbidden env files
         shell: bash
