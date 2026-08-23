@@ -1,0 +1,56 @@
+name: Community Apps validation
+
+on:
+  push:
+    paths:
+      - 'ca_profile.xml'
+      - 'templates/**.xml'
+      - 'unraid/**.xml'
+      - 'icon.svg'
+      - 'README.md'
+      - 'LICENSE'
+      - '.github/workflows/community-apps.yml'
+  pull_request:
+    paths:
+      - 'ca_profile.xml'
+      - 'templates/**.xml'
+      - 'unraid/**.xml'
+      - 'icon.svg'
+      - 'README.md'
+      - 'LICENSE'
+      - '.github/workflows/community-apps.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XML tools
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+
+      - name: Validate XML syntax
+        run: |
+          xmllint --noout ca_profile.xml
+          find templates unraid -type f -name '*.xml' -print0 | xargs -0 -n1 xmllint --noout
+
+      - name: Check Community Apps template metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          template='templates/alarm-hub.xml'
+          for tag in Name Repository Registry Icon WebUI Overview Project TemplateURL ReadMe Category License; do
+            grep -q "<$tag>" "$template" || { echo "Missing <$tag> in $template"; exit 1; }
+          done
+          grep -q '<CommunityApplications>' ca_profile.xml
+          grep -q 'https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/templates/alarm-hub.xml' "$template"
+          grep -q 'https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/icon.svg' "$template"
+
+      - name: Check for forbidden env files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find . -maxdepth 3 -type f \( -name '.env' -o -name '.env.*' \) | grep -q .; then
+            echo 'Alarm-HUB must not ship .env files.'
+            exit 1
+          fi
