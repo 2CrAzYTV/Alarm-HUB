@@ -299,6 +299,26 @@ def guides_page(
   </div>
 </section>
 
+<section id='routing'>
+  <h2>Wegezeit / Routing einrichten</h2>
+  <div class='card'>
+    <h3>OpenRouteService API-Key für Auto und Fahrrad</h3>
+    <p>Alarm-HUB verwendet OpenRouteService für die Wegezeitberechnung mit <b>Auto</b> und <b>Fahrrad</b>. Dafür wird ein persönlicher API-Key benötigt.</p>
+    <ol>
+      <li>Öffne <a href='https://openrouteservice.org/' target='_blank' rel='noopener noreferrer'>openrouteservice.org</a>.</li>
+      <li>Erstelle ein Konto oder melde dich mit deinem bestehenden Konto an.</li>
+      <li>Öffne nach der Anmeldung das <b>Dashboard</b> bzw. den Bereich für <b>API Keys / Tokens</b>.</li>
+      <li>Erstelle einen neuen API-Key und vergib einen eindeutigen Namen, z. B. <b>Alarm-HUB</b>.</li>
+      <li>Kopiere den erzeugten Key und behandle ihn wie ein Passwort. Teile ihn nicht öffentlich und trage ihn nicht in Screenshots ein.</li>
+      <li>Öffne in Unraid <b>Docker → Alarm-HUB → Edit</b>.</li>
+      <li>Trage den Key in die Variable <code>OPENROUTESERVICE_API_KEY</code> ein.</li>
+      <li>Übernimm die Änderung mit <b>Apply</b> und starte bzw. aktualisiere den Container.</li>
+      <li>Öffne anschließend in Alarm-HUB <a href='/integrations'>Integrationen</a>, hinterlege deine Heimatadresse und wähle <b>Auto</b> oder <b>Fahrrad</b>.</li>
+    </ol>
+    <p class='muted'>Wenn kein gültiger OpenRouteService-Key vorhanden ist oder die Route nicht berechnet werden kann, verwendet Alarm-HUB weiterhin die normale WebComm-Vorlaufzeit als Fallback.</p>
+  </div>
+</section>
+
 <section>
   <h2>Fehlersuche</h2>
   <div class='card'>
