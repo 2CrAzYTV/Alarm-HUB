@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from html import escape
 from urllib.parse import quote
@@ -90,6 +91,11 @@ def integrations_page_fixed(
     if request.query_params.get("commute_saved") == "1":
         commute_note = "<p><b>✓ Wegezeit-Einstellungen gespeichert.</b></p>"
 
+    ors_ready = bool(os.getenv("OPENROUTESERVICE_API_KEY", "").strip())
+    google_ready = bool(os.getenv("GOOGLE_MAPS_API_KEY", "").strip())
+    ors_status = "bereit" if ors_ready else "API-Key fehlt"
+    google_status = "bereit" if google_ready else "API-Key fehlt"
+
     status_box = (
         "<div class='card'><h3>WebComm-Syncstatus</h3>"
         f"<p><b>Letzter Sync:</b> {last_sync_text}</p>"
@@ -108,7 +114,7 @@ def integrations_page_fixed(
       <div class='card'>
         <h3>Vorlaufzeiten</h3>
         {saved_note}
-        <p class='muted'>Diese Werte bestimmen, wie viele Minuten vor einer WebComm-Schicht ein Wecker erzeugt wird.</p>
+        <p class='muted'>Diese Werte bestimmen, wie viele Minuten vor Abfahrt bzw. vor dem Fahrtbeginn geweckt wird. Ohne aktive Wegezeit gelten sie direkt vor dem Schichtbeginn.</p>
         <p><b>Aktuell gespeichert:</b> {offsets} Minuten</p>
         <form method='post' action='/integrations/webcomm/offsets'>
           <input type='hidden' name='csrf' value='{token}'>
@@ -122,7 +128,8 @@ def integrations_page_fixed(
       <div class='card'>
         <h3>Wegezeit zum Schichtbeginn</h3>
         {commute_note}
-        <p class='muted'>Die Wegezeit wird später automatisch von deiner Heimatadresse zum in WebComm gelieferten Startort der Schicht berechnet und zusätzlich von der Weckzeit abgezogen.</p>
+        <p class='muted'>Alarm-HUB verwendet automatisch deine Heimatadresse und den von WebComm gelieferten Startort der jeweiligen Schicht. Die Weckzeit wird aus Schichtbeginn, benötigter Wegezeit und deiner Vorlaufzeit berechnet. Fehlt ein Startort oder kann keine Route berechnet werden, wird automatisch nur die normale Vorlaufzeit verwendet.</p>
+        <p><b>Auto/Fahrrad:</b> OpenRouteService · {ors_status}<br><b>Bus/Bahn:</b> Google Routes Transit · {google_status}</p>
         <form method='post' action='/integrations/commute'>
           <input type='hidden' name='csrf' value='{token}'>
           <label class='row'>
