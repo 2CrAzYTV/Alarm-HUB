@@ -81,25 +81,25 @@ The user's WebComm offsets are configurable and may contain any number of values
 ## Unraid
 For a new standard setup, install only `Alarm-HUB`. The normal user only needs the WebUI port and `/config` appdata path; PostgreSQL and the application secret are handled automatically. No second PostgreSQL container and no `.env` file are required.
 
-The Community Apps submission template is located at:
+The canonical Community Apps template is maintained in the central 2CrAzYTV repository:
 
 ```text
-templates/alarm-hub.xml
+2CrAzYTV/unraid-community-apps/templates/alarm-hub.xml
 ```
 
-An older/manual template is retained as `unraid/alarm-hub.xml.example` for reference without being detected as a second Community Apps application. For existing or advanced external-database deployments, set `DATABASE_MODE=external` and keep the existing `DATABASE_URL` and `SECRET_KEY`.
+A synchronized project-local template remains at `templates/alarm-hub.xml` for source review and validation. An older/manual template is retained as `unraid/alarm-hub.xml.example` for reference without being published as a separate Community Apps application. For existing or advanced external-database deployments, set `DATABASE_MODE=external` and keep the existing `DATABASE_URL` and `SECRET_KEY`.
 
 ## Community Apps submission
-The repository is structured for the current Unraid Community Apps submission flow:
+Community Apps metadata for Alarm-HUB is published from the central repository `2CrAzYTV/unraid-community-apps` together with the other 2CrAzYTV applications. This repository remains the source-of-truth for the Alarm-HUB application code, README, support and container build.
 
-- `ca_profile.xml` provides repository metadata.
-- `templates/alarm-hub.xml` is the single Community Apps Docker template and contains its canonical raw `TemplateURL`.
-- `icon.png` is the PNG icon used by the Unraid template and Community Apps profile; `icon.svg` remains the source artwork.
+- The canonical CA template is `2CrAzYTV/unraid-community-apps/templates/alarm-hub.xml`.
+- `templates/alarm-hub.xml` in this repository is a project-local mirror whose `TemplateURL` points to the central canonical file.
+- `icon.png` and `icon.svg` remain the Alarm-HUB application artwork.
 - `LICENSE` provides the OSI-approved MIT license.
-- `.github/workflows/community-apps.yml` checks XML syntax, required template metadata, icon references, and ensures no `.env` file is shipped.
+- `.github/workflows/community-apps.yml` validates the local mirror and its reference to the central template.
 - Files below `unraid/` use the `.xml.example` suffix so they remain documentation/manual examples and are not published as additional Community Apps entries.
 
-Before publishing, run **Validate** and **Scan** in the Unraid Community Apps submission portal. The portal is the source of truth for final acceptance and may report requirements that are newer than the repository checks.
+Before publishing changes, run **Validate** and **Scan** in the Unraid Community Apps submission portal against the central repository. The portal is the source of truth for final acceptance and may report requirements that are newer than the repository checks.
 
 ## Support
 Please use GitHub Issues for bugs and support requests. Do not post passwords, API tokens, database credentials, session secrets, or other private data in issues or logs.
