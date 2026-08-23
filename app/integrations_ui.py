@@ -92,9 +92,8 @@ def integrations_page_fixed(
         commute_note = "<p><b>✓ Wegezeit-Einstellungen gespeichert.</b></p>"
 
     ors_ready = bool(os.getenv("OPENROUTESERVICE_API_KEY", "").strip())
-    google_ready = bool(os.getenv("GOOGLE_MAPS_API_KEY", "").strip())
     ors_status = "bereit" if ors_ready else "API-Key fehlt"
-    google_status = "bereit" if google_ready else "API-Key fehlt"
+    transitous_status = "bereit" if ors_ready else "OpenRouteService-Key für Adressauflösung fehlt"
 
     status_box = (
         "<div class='card'><h3>WebComm-Syncstatus</h3>"
@@ -129,7 +128,8 @@ def integrations_page_fixed(
         <h3>Wegezeit zum Schichtbeginn</h3>
         {commute_note}
         <p class='muted'>Alarm-HUB verwendet automatisch deine Heimatadresse und den von WebComm gelieferten Startort der jeweiligen Schicht. Die Weckzeit wird aus Schichtbeginn, benötigter Wegezeit und deiner Vorlaufzeit berechnet. Fehlt ein Startort oder kann keine Route berechnet werden, wird automatisch nur die normale Vorlaufzeit verwendet.</p>
-        <p><b>Auto/Fahrrad:</b> OpenRouteService · {ors_status}<br><b>Bus/Bahn:</b> Google Routes Transit · {google_status}</p>
+        <p><b>Auto/Fahrrad:</b> OpenRouteService · {ors_status}<br><b>Bus/Bahn:</b> Transitous · {transitous_status}</p>
+        <p class='muted'>Bus/Bahn wird über den freien Open-Source-Routingdienst <a href='https://transitous.org/' target='_blank' rel='noopener noreferrer'>Transitous</a> berechnet. Verwendete ÖPNV-Datenquellen und OpenStreetMap-Hinweise: <a href='https://transitous.org/sources/' target='_blank' rel='noopener noreferrer'>Transitous Sources</a>.</p>
         <form method='post' action='/integrations/commute'>
           <input type='hidden' name='csrf' value='{token}'>
           <label class='row'>
