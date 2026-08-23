@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 from . import main
 
 
+ROUTINEHUB_PAGE = "https://routinehub.co/shortcut/21697/"
+ROUTINEHUB_DOWNLOAD = "https://routinehub.co/download/59565/?t=eyJ2Ijo1OTU2NX0:1wy3IN:uAgosFteGGum_57LQ3Io47B7f9unHbYNOx73Etz23pQ"
+
 _original_layout = main._layout
 
 
@@ -39,27 +42,29 @@ def guides_page(
 <section>
   <h2>Smartphone-Wecker – ausführliche Anleitung für Anfänger</h2>
   <p>Alarm-HUB verwaltet deine Weckzeiten auf dem Server. Damit dein Smartphone wirklich klingelt, muss dein iPhone oder Android-Gerät den nächsten Wecker von Alarm-HUB abrufen und anschließend einen lokalen Wecker in der Uhr-App anlegen.</p>
+
   <div class='card'>
     <h3>Bevor du beginnst</h3>
     <ol>
       <li>Erstelle in Alarm-HUB mindestens einen manuellen Wecker oder stelle sicher, dass über WebComm bereits kommende Wecker vorhanden sind.</li>
       <li>Öffne <a href='/devices'>Geräte / API</a>.</li>
-      <li>Gib als Namen z. B. <b>Mein iPhone</b> oder <b>Mein Android</b> ein.</li>
+      <li>Gib als Gerätenamen z. B. <b>Mein iPhone</b> oder <b>Mein Android</b> ein.</li>
       <li>Klicke auf <b>Token erzeugen</b>.</li>
-      <li>Kopiere das angezeigte Token sofort und speichere es vorübergehend sicher. Es wird nur ein einziges Mal vollständig angezeigt.</li>
-      <li>Behandle dieses Token wie ein Passwort. Wer das Token kennt, kann deine kommenden Wecker über die API abrufen.</li>
+      <li>Kopiere das angezeigte Token sofort. Es wird nur einmal vollständig angezeigt.</li>
+      <li>Behandle das Token wie ein Passwort und teile es nicht öffentlich.</li>
     </ol>
   </div>
+
   <div class='card'>
-    <h3>Diese Adresse brauchst du später</h3>
+    <h3>Alarm-HUB API</h3>
     <p><code>{endpoint}</code></p>
-    <p>Alarm-HUB erwartet zusätzlich den HTTP-Header:</p>
+    <p>Für die Abfrage wird zusätzlich folgender HTTP-Header benötigt:</p>
     <p><code>Authorization: Bearer DEIN_TOKEN</code></p>
-    <p class='muted'>Das Wort <code>Bearer</code>, danach genau ein Leerzeichen und anschließend dein Token.</p>
+    <p class='muted'>Zwischen <code>Bearer</code> und dem Token steht genau ein Leerzeichen.</p>
   </div>
+
   <div class='card'>
-    <h3>Was die API zurückgibt</h3>
-    <p>Wenn ein Wecker vorhanden ist, sieht die Antwort sinngemäß so aus:</p>
+    <h3>Beispielantwort</h3>
     <pre><code>{{
   "ok": true,
   "timezone": "Europe/Berlin",
@@ -70,130 +75,119 @@ def guides_page(
     "source": "webcomm"
   }}
 }}</code></pre>
-    <p>Für die Smartphone-Einrichtung benötigen wir hauptsächlich <code>alarm.time</code> und <code>alarm.name</code>.</p>
+    <p>Für den Smartphone-Wecker sind vor allem <code>alarm.time</code> und <code>alarm.name</code> wichtig.</p>
   </div>
-  <p><b>Netzwerk-Hinweis:</b> Wenn Alarm-HUB nur im Heimnetz erreichbar ist, funktioniert die Synchronisation unterwegs nur über VPN. Für direkten Internetzugriff solltest du Alarm-HUB ausschließlich über HTTPS hinter einem korrekt konfigurierten Reverse Proxy bereitstellen.</p>
+
+  <p><b>Netzwerk-Hinweis:</b> Wenn Alarm-HUB nur im Heimnetz erreichbar ist, funktioniert die Synchronisation unterwegs nur über VPN. Für direkten Internetzugriff sollte Alarm-HUB ausschließlich über HTTPS hinter einem korrekt konfigurierten Reverse Proxy bereitgestellt werden.</p>
 </section>
 
 <section id='ios'>
-  <h2>iOS / iPhone – Schritt für Schritt mit Kurzbefehle</h2>
-  <p>Diese Variante verwendet ausschließlich die Apple-App <b>Kurzbefehle</b>. Je nach iOS-Version können einzelne Aktionsnamen geringfügig anders heißen.</p>
+  <h2>iOS / iPhone</h2>
 
   <div class='card'>
-    <h3>Teil 1 – Neuen Kurzbefehl anlegen</h3>
+    <h3>Empfohlen – fertigen Alarm-HUB-Kurzbefehl installieren</h3>
+    <p>Für iPhone-Nutzer steht ein fertiger Alarm-HUB-Kurzbefehl über RoutineHub bereit. Damit musst du die komplette Kurzbefehle-Logik nicht selbst nachbauen.</p>
+    <p class='row'>
+      <a href='{ROUTINEHUB_DOWNLOAD}' target='_blank' rel='noopener noreferrer'><button type='button'>📲 Kurzbefehl direkt installieren</button></a>
+      <a href='{ROUTINEHUB_PAGE}' target='_blank' rel='noopener noreferrer'><button type='button'>🔗 RoutineHub-Seite öffnen</button></a>
+    </p>
+    <p class='muted'>Falls der Direktdownload später nicht mehr funktioniert, öffne die RoutineHub-Seite und installiere dort die aktuelle Version.</p>
+  </div>
+
+  <div class='card'>
+    <h3>Nach der Installation – Schritt für Schritt</h3>
     <ol>
-      <li>Öffne auf deinem iPhone die App <b>Kurzbefehle</b>.</li>
-      <li>Tippe oben rechts auf das <b>+</b>.</li>
-      <li>Tippe oben auf <b>Neuer Kurzbefehl</b> und anschließend auf <b>Umbenennen</b>.</li>
-      <li>Nenne den Kurzbefehl <b>Alarm-HUB Sync</b>.</li>
-      <li>Tippe auf <b>Aktion hinzufügen</b>.</li>
+      <li>Tippe oben auf <b>Kurzbefehl direkt installieren</b> oder öffne die RoutineHub-Seite.</li>
+      <li>Bestätige auf dem iPhone, dass der Kurzbefehl in der App <b>Kurzbefehle</b> geöffnet bzw. hinzugefügt werden soll.</li>
+      <li>Öffne anschließend den importierten Alarm-HUB-Kurzbefehl in <b>Kurzbefehle</b>.</li>
+      <li>Öffne in Alarm-HUB <a href='/devices'>Geräte / API</a> und erzeuge ein Geräte-Token, falls noch keines für dein iPhone vorhanden ist.</li>
+      <li>Trage im Kurzbefehl die Adresse deiner eigenen Alarm-HUB-Installation ein. Für diese Installation lautet der API-Endpunkt:<br><code>{endpoint}</code></li>
+      <li>Trage dein persönliches Geräte-Token an der dafür vorgesehenen Stelle ein. Das Token darf nicht öffentlich geteilt werden.</li>
+      <li>Starte den Kurzbefehl zunächst <b>einmal manuell</b>.</li>
+      <li>Erlaube erforderliche Berechtigungen für Netzwerkzugriff und die Uhr-/Wecker-Funktionen, falls iOS danach fragt.</li>
+      <li>Öffne danach die App <b>Uhr</b> → <b>Wecker</b> und prüfe, ob der Alarm-HUB-Wecker mit der erwarteten Uhrzeit angelegt wurde.</li>
+      <li>Öffne anschließend in Alarm-HUB <a href='/devices'>Geräte / API</a>. Beim iPhone-Token sollte unter <b>zuletzt benutzt</b> eine aktuelle Zeit stehen.</li>
     </ol>
   </div>
 
   <div class='card'>
-    <h3>Teil 2 – Alarm-HUB-Adresse eintragen</h3>
+    <h3>Automatische Ausführung auf dem iPhone</h3>
     <ol>
-      <li>Suche nach der Aktion <b>URL</b> und füge sie hinzu.</li>
-      <li>Tippe in das URL-Feld.</li>
-      <li>Trage exakt diese Adresse ein:<br><code>{endpoint}</code></li>
-      <li>Füge darunter die Aktion <b>Inhalte von URL abrufen</b> hinzu.</li>
-      <li>Öffne in dieser Aktion die erweiterten Optionen bzw. <b>Mehr anzeigen</b>.</li>
-      <li>Stelle die Methode auf <b>GET</b>.</li>
-    </ol>
-  </div>
-
-  <div class='card'>
-    <h3>Teil 3 – Geräte-Token als Header eintragen</h3>
-    <ol>
-      <li>Suche innerhalb der Aktion <b>Inhalte von URL abrufen</b> den Bereich <b>Header</b>.</li>
-      <li>Füge einen neuen Header hinzu.</li>
-      <li>Als Schlüssel bzw. Name trägst du ein:<br><code>Authorization</code></li>
-      <li>Als Wert trägst du ein:<br><code>Bearer DEIN_TOKEN</code></li>
-      <li>Ersetze <code>DEIN_TOKEN</code> vollständig durch das Token aus Alarm-HUB.</li>
-      <li>Achte darauf, dass zwischen <code>Bearer</code> und deinem Token genau ein Leerzeichen steht.</li>
-    </ol>
-    <p class='muted'>Das Token niemals in die URL schreiben und niemals öffentlich teilen.</p>
-  </div>
-
-  <div class='card'>
-    <h3>Teil 4 – Verbindung testen</h3>
-    <ol>
-      <li>Tippe unten oder oben im Kurzbefehleditor auf die <b>Play-/Ausführen-Taste</b>.</li>
-      <li>Beim ersten Zugriff kann iOS nach einer Berechtigung für den Netzwerkzugriff fragen. Erlaube den Zugriff.</li>
-      <li>Wenn keine Fehlermeldung erscheint, öffne in Alarm-HUB <a href='/devices'>Geräte / API</a>.</li>
-      <li>Bei deinem iPhone-Token sollte bei <b>zuletzt benutzt</b> nun eine aktuelle Uhrzeit stehen.</li>
-      <li>Falls dort weiterhin <b>noch nie benutzt</b> steht, prüfe zuerst URL, Token, WLAN/VPN und den Header.</li>
-    </ol>
-  </div>
-
-  <div class='card'>
-    <h3>Teil 5 – Den Bereich <code>alarm</code> aus der Antwort lesen</h3>
-    <ol>
-      <li>Füge direkt nach <b>Inhalte von URL abrufen</b> die Aktion <b>Wörterbuchwert abrufen</b> / <b>Get Dictionary Value</b> hinzu.</li>
-      <li>Als Schlüssel trägst du <code>alarm</code> ein.</li>
-      <li>Diese Aktion enthält danach nur noch die Daten des nächsten Weckers.</li>
-      <li>Optional kannst du zum Testen kurz die Aktion <b>Schnellvorschau</b> oder <b>Ergebnis anzeigen</b> hinzufügen. Dort sollten Name, Datum und Uhrzeit des nächsten Weckers erscheinen.</li>
-      <li>Entferne die Testanzeige anschließend wieder, wenn alles funktioniert.</li>
-    </ol>
-  </div>
-
-  <div class='card'>
-    <h3>Teil 6 – Uhrzeit auslesen</h3>
-    <ol>
-      <li>Füge eine weitere Aktion <b>Wörterbuchwert abrufen</b> hinzu.</li>
-      <li>Verwende als Eingabe den zuvor gelesenen Wert <code>alarm</code>.</li>
-      <li>Als Schlüssel trägst du <code>time</code> ein.</li>
-      <li>Das Ergebnis sieht z. B. so aus: <code>04:34</code>.</li>
-      <li>Füge anschließend die Aktion <b>Text teilen</b> / <b>Split Text</b> hinzu.</li>
-      <li>Als Trennzeichen verwendest du einen Doppelpunkt <code>:</code>.</li>
-      <li>Du erhältst damit zwei Teile: der erste ist die Stunde, der zweite die Minute.</li>
-      <li>Mit <b>Element aus Liste abrufen</b> liest du Element 1 als Stunde und Element 2 als Minute aus.</li>
-    </ol>
-  </div>
-
-  <div class='card'>
-    <h3>Teil 7 – Namen des Weckers auslesen</h3>
-    <ol>
-      <li>Füge noch einmal <b>Wörterbuchwert abrufen</b> hinzu.</li>
-      <li>Verwende wieder das Wörterbuch <code>alarm</code> als Eingabe.</li>
-      <li>Als Schlüssel verwendest du <code>name</code>.</li>
-      <li>Das Ergebnis ist z. B. <code>Frühschicht</code>.</li>
-      <li>Diesen Wert verwenden wir gleich als Beschriftung des iPhone-Weckers.</li>
-    </ol>
-  </div>
-
-  <div class='card'>
-    <h3>Teil 8 – Lokalen iPhone-Wecker erstellen</h3>
-    <ol>
-      <li>Suche nach einer Uhr-/Wecker-Aktion wie <b>Wecker erstellen</b> bzw. <b>Create Alarm</b>.</li>
-      <li>Setze die Weckzeit aus der zuvor ausgelesenen Stunde und Minute zusammen.</li>
-      <li>Als Bezeichnung verwendest du z. B. <b>Alarm-HUB –</b> gefolgt vom Wert <code>name</code>.</li>
-      <li>Lass die Wiederholung des lokalen Weckers deaktiviert. Alarm-HUB liefert beim nächsten Sync wieder den aktuell nächsten Wecker.</li>
-      <li>Führe den Kurzbefehl erneut manuell aus.</li>
-      <li>Öffne danach die Apple-App <b>Uhr</b> → <b>Wecker</b>.</li>
-      <li>Kontrolliere, ob Uhrzeit und Beschriftung stimmen.</li>
-    </ol>
-  </div>
-
-  <div class='card'>
-    <h3>Teil 9 – Automatisch ausführen lassen</h3>
-    <ol>
-      <li>Öffne in der App <b>Kurzbefehle</b> unten den Bereich <b>Automation</b>.</li>
+      <li>Öffne die App <b>Kurzbefehle</b>.</li>
+      <li>Wechsle unten zu <b>Automation</b>.</li>
       <li>Tippe auf <b>+</b> bzw. <b>Neue Automation</b>.</li>
-      <li>Wähle als Auslöser <b>Tageszeit</b>.</li>
-      <li>Lege eine Uhrzeit fest, zu der Alarm-HUB regelmäßig abgefragt werden soll, z. B. nachts oder früh morgens.</li>
+      <li>Wähle <b>Tageszeit</b>.</li>
+      <li>Lege eine Uhrzeit fest, zu der Alarm-HUB regelmäßig abgefragt werden soll.</li>
       <li>Wähle <b>Täglich</b>.</li>
-      <li>Wähle, sofern deine iOS-Version dies anbietet, <b>Sofort ausführen</b> und deaktiviere eine unnötige Bestätigungsabfrage.</li>
-      <li>Als auszuführende Aktion wählst du <b>Kurzbefehl ausführen</b>.</li>
-      <li>Wähle dort <b>Alarm-HUB Sync</b>.</li>
-      <li>Speichere die Automation.</li>
-      <li>Wenn sich deine Schichten im Tagesverlauf ändern können, kannst du eine zweite Automation zu einer weiteren Tageszeit anlegen.</li>
+      <li>Aktiviere, sofern deine iOS-Version diese Auswahl anbietet, <b>Sofort ausführen</b>.</li>
+      <li>Wähle als Aktion <b>Kurzbefehl ausführen</b>.</li>
+      <li>Wähle den installierten Alarm-HUB-Kurzbefehl.</li>
+      <li>Speichere die Automation und führe danach einmal einen manuellen Test durch.</li>
     </ol>
   </div>
+
+  <details>
+    <summary><b>Manuelle Einrichtung – falls du den Kurzbefehl selbst bauen möchtest</b></summary>
+
+    <div class='card'>
+      <h3>Teil 1 – Neuen Kurzbefehl anlegen</h3>
+      <ol>
+        <li>Öffne auf dem iPhone die App <b>Kurzbefehle</b>.</li>
+        <li>Tippe oben rechts auf <b>+</b>.</li>
+        <li>Benenne den neuen Kurzbefehl in <b>Alarm-HUB Sync</b> um.</li>
+        <li>Tippe auf <b>Aktion hinzufügen</b>.</li>
+      </ol>
+    </div>
+
+    <div class='card'>
+      <h3>Teil 2 – Alarm-HUB abfragen</h3>
+      <ol>
+        <li>Füge die Aktion <b>URL</b> hinzu.</li>
+        <li>Trage <code>{endpoint}</code> ein.</li>
+        <li>Füge darunter <b>Inhalte von URL abrufen</b> hinzu.</li>
+        <li>Stelle die Methode auf <b>GET</b>.</li>
+        <li>Füge den Header <code>Authorization</code> hinzu.</li>
+        <li>Als Wert verwendest du <code>Bearer DEIN_TOKEN</code> und ersetzt <code>DEIN_TOKEN</code> durch dein Geräte-Token.</li>
+      </ol>
+    </div>
+
+    <div class='card'>
+      <h3>Teil 3 – Verbindung testen</h3>
+      <ol>
+        <li>Führe den Kurzbefehl einmal aus.</li>
+        <li>Erlaube den Netzwerkzugriff, falls iOS danach fragt.</li>
+        <li>Prüfe in Alarm-HUB unter <a href='/devices'>Geräte / API</a>, ob das Token nun als zuletzt benutzt angezeigt wird.</li>
+        <li>Falls nicht, prüfe URL, WLAN/VPN, Token und Authorization-Header.</li>
+      </ol>
+    </div>
+
+    <div class='card'>
+      <h3>Teil 4 – Weckerdaten auslesen</h3>
+      <ol>
+        <li>Füge nach <b>Inhalte von URL abrufen</b> die Aktion <b>Wörterbuchwert abrufen</b> hinzu.</li>
+        <li>Verwende als Schlüssel <code>alarm</code>.</li>
+        <li>Aus diesem Wörterbuch liest du anschließend den Schlüssel <code>time</code>.</li>
+        <li>Der Wert hat das Format <code>HH:MM</code>, z. B. <code>04:34</code>.</li>
+        <li>Lies zusätzlich aus <code>alarm</code> den Schlüssel <code>name</code> aus.</li>
+      </ol>
+    </div>
+
+    <div class='card'>
+      <h3>Teil 5 – Uhrzeit zerlegen und Wecker erstellen</h3>
+      <ol>
+        <li>Teile den Wert aus <code>time</code> mit <b>Text teilen</b> am Doppelpunkt <code>:</code>.</li>
+        <li>Element 1 ist die Stunde, Element 2 die Minute.</li>
+        <li>Füge die Uhr-/Wecker-Aktion zum Erstellen eines neuen Weckers hinzu.</li>
+        <li>Verwende Stunde und Minute aus den zuvor gelesenen Werten.</li>
+        <li>Als Bezeichnung kannst du <b>Alarm-HUB –</b> gefolgt von <code>name</code> verwenden.</li>
+        <li>Führe den Kurzbefehl erneut aus und kontrolliere den Wecker in der Apple-Uhr-App.</li>
+      </ol>
+    </div>
+  </details>
 
   <div class='card'>
     <h3>Doppelte iPhone-Wecker vermeiden</h3>
-    <p>Wenn dieselbe Automation mehrfach läuft, kann iOS denselben Wecker mehrmals anlegen. Für den Einstieg empfiehlt es sich daher, nur ein- oder zweimal täglich zu synchronisieren. Eine spätere erweiterte Variante kann vor dem Erstellen vorhandene Wecker mit der Bezeichnung <b>Alarm-HUB</b> suchen und löschen bzw. abgleichen.</p>
+    <p>Wenn eine selbst erstellte Automation den Wecker bei jedem Lauf neu anlegt, können Duplikate entstehen. Der bereitgestellte RoutineHub-Kurzbefehl ist deshalb die empfohlene Variante. Bei eigenen Kurzbefehlen solltest du vorhandene Alarm-HUB-Wecker vor dem erneuten Anlegen suchen, vergleichen oder entfernen.</p>
   </div>
 </section>
 
@@ -207,8 +201,7 @@ def guides_page(
       <li>Installiere MacroDroid aus dem offiziellen App-Store deines Geräts.</li>
       <li>Öffne MacroDroid.</li>
       <li>Erlaube die grundlegenden Berechtigungen, die MacroDroid für Automationen benötigt.</li>
-      <li>Erstelle ein neues Makro.</li>
-      <li>Nenne es <b>Alarm-HUB Sync</b>.</li>
+      <li>Erstelle ein neues Makro und nenne es <b>Alarm-HUB Sync</b>.</li>
     </ol>
   </div>
 
@@ -216,25 +209,23 @@ def guides_page(
     <h3>Teil 2 – Auslöser festlegen</h3>
     <ol>
       <li>Öffne im neuen Makro den Bereich <b>Trigger / Auslöser</b>.</li>
-      <li>Wähle einen zeitgesteuerten Trigger, z. B. <b>Tag/Uhrzeit</b> oder eine vergleichbare Zeitplan-Funktion.</li>
+      <li>Wähle einen zeitgesteuerten Trigger, z. B. <b>Tag/Uhrzeit</b>.</li>
       <li>Stelle eine Uhrzeit ein, zu der dein Smartphone Alarm-HUB abfragen soll.</li>
-      <li>Für den Anfang reicht einmal täglich.</li>
-      <li>Wenn sich deine WebComm-Schichten häufiger ändern, kannst du später eine zweite Ausführung am Tag ergänzen.</li>
+      <li>Für den Anfang reicht einmal täglich. Bei häufigen Änderungen kann später eine zweite Ausführung ergänzt werden.</li>
     </ol>
   </div>
 
   <div class='card'>
-    <h3>Teil 3 – HTTP-Abfrage an Alarm-HUB erstellen</h3>
+    <h3>Teil 3 – HTTP-Abfrage erstellen</h3>
     <ol>
-      <li>Öffne im Makro den Bereich <b>Aktionen</b>.</li>
-      <li>Suche nach einer Aktion wie <b>HTTP Request</b>, <b>HTTP-Anfrage</b> oder <b>Web Request</b>.</li>
+      <li>Öffne den Bereich <b>Aktionen</b>.</li>
+      <li>Füge eine <b>HTTP Request</b>- bzw. <b>HTTP-Anfrage</b>-Aktion hinzu.</li>
       <li>Stelle die Methode auf <b>GET</b>.</li>
-      <li>Als URL trägst du exakt ein:<br><code>{endpoint}</code></li>
-      <li>Öffne in der HTTP-Aktion den Bereich für zusätzliche <b>Header</b>.</li>
-      <li>Füge einen Header mit dem Namen <code>Authorization</code> hinzu.</li>
+      <li>Als URL verwendest du <code>{endpoint}</code>.</li>
+      <li>Füge den Header <code>Authorization</code> hinzu.</li>
       <li>Als Wert verwendest du <code>Bearer DEIN_TOKEN</code>.</li>
-      <li>Ersetze <code>DEIN_TOKEN</code> mit dem zuvor in Alarm-HUB erzeugten Android-Token.</li>
-      <li>Speichere die HTTP-Antwort in einer String-/Textvariable, z. B. <code>alarmhub_response</code>.</li>
+      <li>Ersetze <code>DEIN_TOKEN</code> durch dein zuvor erzeugtes Android-Geräte-Token.</li>
+      <li>Speichere die HTTP-Antwort in einer Textvariable, z. B. <code>alarmhub_response</code>.</li>
     </ol>
   </div>
 
@@ -243,73 +234,68 @@ def guides_page(
     <ol>
       <li>Starte das Makro einmal manuell.</li>
       <li>Öffne anschließend Alarm-HUB → <a href='/devices'>Geräte / API</a>.</li>
-      <li>Bei deinem Android-Token sollte <b>zuletzt benutzt</b> nun eine aktuelle Zeit anzeigen.</li>
-      <li>Falls nicht, prüfe zuerst WLAN/VPN, URL und den Authorization-Header.</li>
+      <li>Beim Android-Token sollte <b>zuletzt benutzt</b> eine aktuelle Zeit anzeigen.</li>
       <li>Wenn MacroDroid einen HTTP-Status anzeigt, sollte Alarm-HUB mit <b>200</b> antworten.</li>
-      <li>Ein Fehler <b>401</b> bedeutet normalerweise, dass Token oder Authorization-Header nicht stimmen.</li>
+      <li>Ein Fehler <b>401</b> weist normalerweise auf ein falsches Token oder einen falschen Authorization-Header hin.</li>
     </ol>
   </div>
 
   <div class='card'>
-    <h3>Teil 5 – JSON-Daten aus der Antwort lesen</h3>
+    <h3>Teil 5 – JSON-Daten lesen</h3>
     <ol>
       <li>Die HTTP-Antwort enthält JSON.</li>
-      <li>Verwende in MacroDroid eine JSON-/Textverarbeitungsaktion oder die verfügbaren JSON-Ausgabevariablen der HTTP-Aktion.</li>
-      <li>Lies zuerst <code>alarm.time</code> aus und speichere den Wert z. B. in <code>alarm_time</code>.</li>
-      <li>Lies anschließend <code>alarm.name</code> aus und speichere den Wert z. B. in <code>alarm_name</code>.</li>
-      <li>Wenn <code>alarm</code> den Wert <code>null</code> hat, gibt es aktuell keinen kommenden Wecker. In diesem Fall soll das Makro beendet werden, ohne einen Wecker anzulegen.</li>
+      <li>Lies <code>alarm.time</code> aus und speichere den Wert z. B. in <code>alarm_time</code>.</li>
+      <li>Lies <code>alarm.name</code> aus und speichere den Wert z. B. in <code>alarm_name</code>.</li>
+      <li>Wenn <code>alarm</code> den Wert <code>null</code> hat, gibt es aktuell keinen kommenden Wecker. Beende das Makro dann ohne neuen Wecker.</li>
     </ol>
   </div>
 
   <div class='card'>
     <h3>Teil 6 – Stunde und Minute trennen</h3>
     <ol>
-      <li><code>alarm_time</code> hat das Format <code>HH:MM</code>, z. B. <code>04:34</code>.</li>
+      <li><code>alarm_time</code> hat das Format <code>HH:MM</code>.</li>
       <li>Teile den Text am Doppelpunkt <code>:</code>.</li>
-      <li>Der erste Teil ist die Stunde.</li>
-      <li>Der zweite Teil ist die Minute.</li>
-      <li>Speichere beide Werte in Variablen, z. B. <code>alarm_hour</code> und <code>alarm_minute</code>.</li>
+      <li>Der erste Teil ist die Stunde, der zweite die Minute.</li>
+      <li>Speichere beide Werte z. B. als <code>alarm_hour</code> und <code>alarm_minute</code>.</li>
     </ol>
   </div>
 
   <div class='card'>
     <h3>Teil 7 – Android-Wecker anlegen</h3>
     <ol>
-      <li>Füge eine Aktion zum <b>Wecker setzen</b>, <b>Alarm setzen</b> oder eine entsprechende Alarm-Clock-Aktion hinzu.</li>
-      <li>Verwende <code>alarm_hour</code> als Stunde.</li>
-      <li>Verwende <code>alarm_minute</code> als Minute.</li>
+      <li>Füge eine Aktion zum <b>Wecker setzen</b> bzw. eine passende Alarm-Clock-Aktion hinzu.</li>
+      <li>Verwende <code>alarm_hour</code> als Stunde und <code>alarm_minute</code> als Minute.</li>
       <li>Als Beschriftung verwendest du <b>Alarm-HUB –</b> gefolgt von <code>alarm_name</code>.</li>
-      <li>Wenn MacroDroid keine direkte Wecker-Aktion anbietet, verwende die Aktion für einen Android-Intent bzw. die Alarm-Clock-Funktion.</li>
+      <li>Falls keine direkte Wecker-Aktion verfügbar ist, verwende die Android-Intent-/Alarm-Clock-Funktion.</li>
       <li>Speichere das Makro.</li>
     </ol>
   </div>
 
   <div class='card'>
-    <h3>Teil 8 – Android-Berechtigungen richtig setzen</h3>
+    <h3>Teil 8 – Berechtigungen</h3>
     <ol>
       <li>Führe das Makro manuell aus.</li>
-      <li>Wenn Android nach der Berechtigung zum Setzen von Weckern fragt, erlaube sie.</li>
-      <li>Wenn dein Hersteller Hintergrundaktivitäten einschränkt, öffne die Android-Einstellungen → Apps → MacroDroid → Akku.</li>
-      <li>Setze MacroDroid dort, falls nötig, auf <b>Nicht eingeschränkt</b> bzw. deaktiviere die Akku-Optimierung.</li>
-      <li>Bei Samsung, Xiaomi, Huawei und ähnlichen Geräten kann zusätzlich eine Autostart-/Hintergrundberechtigung erforderlich sein.</li>
+      <li>Erlaube die Berechtigung zum Setzen von Weckern, falls Android danach fragt.</li>
+      <li>Bei eingeschränkter Hintergrundausführung öffne Android-Einstellungen → Apps → MacroDroid → Akku.</li>
+      <li>Setze MacroDroid bei Bedarf auf <b>Nicht eingeschränkt</b> bzw. deaktiviere die Akku-Optimierung.</li>
+      <li>Einige Hersteller benötigen zusätzlich eine Autostart-/Hintergrundberechtigung.</li>
     </ol>
   </div>
 
   <div class='card'>
     <h3>Teil 9 – Funktion prüfen</h3>
     <ol>
-      <li>Starte <b>Alarm-HUB Sync</b> einmal manuell.</li>
+      <li>Starte <b>Alarm-HUB Sync</b> manuell.</li>
       <li>Öffne danach deine Android-Uhr-App.</li>
-      <li>Prüfe, ob ein neuer Wecker mit der richtigen Uhrzeit vorhanden ist.</li>
-      <li>Prüfe außerdem, ob die Beschriftung <b>Alarm-HUB – ...</b> stimmt.</li>
+      <li>Prüfe Uhrzeit und Beschriftung des Weckers.</li>
       <li>Kontrolliere in Alarm-HUB unter <a href='/devices'>Geräte / API</a>, ob das Token zuletzt benutzt wurde.</li>
-      <li>Wenn alle drei Punkte stimmen, ist die Einrichtung erfolgreich.</li>
+      <li>Wenn diese Punkte stimmen, ist die Einrichtung erfolgreich.</li>
     </ol>
   </div>
 
   <div class='card'>
     <h3>Doppelte Android-Wecker vermeiden</h3>
-    <p>Je nach Uhr-App kann jedes Ausführen des Makros einen weiteren Wecker anlegen. Für Anfänger empfiehlt sich daher zunächst nur eine feste Synchronisation pro Tag. Später kann das Makro vor dem Anlegen vorhandene Alarm-HUB-Wecker entfernen oder vergleichen.</p>
+    <p>Je nach Uhr-App kann jedes Ausführen des Makros einen weiteren Wecker anlegen. Für Anfänger empfiehlt sich zunächst eine feste Synchronisation pro Tag. Später kann das Makro vorhandene Alarm-HUB-Wecker vor dem Anlegen entfernen oder vergleichen.</p>
   </div>
 </section>
 
@@ -321,15 +307,15 @@ def guides_page(
   </div>
   <div class='card'>
     <h3>HTTP 401 / Ungültiges Token</h3>
-    <p>Erzeuge unter <a href='/devices'>Geräte / API</a> ein neues Token und trage es erneut ein. Achte auf das Leerzeichen nach <code>Bearer</code>.</p>
+    <p>Erzeuge unter <a href='/devices'>Geräte / API</a> bei Bedarf ein neues Token und trage es erneut ein. Achte auf das Leerzeichen nach <code>Bearer</code>.</p>
   </div>
   <div class='card'>
     <h3>Die API funktioniert, aber kein Wecker wird erstellt</h3>
-    <p>Dann liegt das Problem meistens in der Smartphone-Automation. Prüfe, ob <code>alarm.time</code> korrekt gelesen wird, ob Stunde und Minute richtig getrennt werden und ob Kurzbefehle bzw. MacroDroid die Berechtigung zum Erstellen von Weckern besitzen.</p>
+    <p>Prüfe, ob <code>alarm.time</code> korrekt gelesen wird und ob Kurzbefehle bzw. MacroDroid die nötige Berechtigung zum Erstellen von Weckern besitzen.</p>
   </div>
   <div class='card'>
     <h3>Es gibt keinen kommenden Wecker</h3>
-    <p>Öffne in Alarm-HUB das Dashboard oder <a href='/alarms'>Meine Wecker</a>. Wenn dort kein zukünftiger Wecker vorhanden ist, liefert die API <code>alarm: null</code>. Das ist kein Fehler.</p>
+    <p>Öffne in Alarm-HUB das Dashboard oder <a href='/alarms'>Meine Wecker</a>. Wenn kein zukünftiger Wecker vorhanden ist, liefert die API <code>alarm: null</code>. Das ist kein Fehler.</p>
   </div>
   <p class='muted'>Die Smartphone-Automation verwendet immer den aktuell nächsten bekannten Wecker. Änderungen an manuellen Weckern oder WebComm-Schichten werden beim nächsten erfolgreichen Sync berücksichtigt.</p>
 </section>
