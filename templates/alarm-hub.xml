@@ -11,12 +11,12 @@
   <Overview>Alarm-HUB is a standalone multi-user alarm service with manual alarms, mobile API access, optional WebComm Calendar Sync integration, direct WebComm import, and optional commute-aware alarms. PostgreSQL is embedded by default, so a normal Unraid installation requires only one container. Persistent application and database data are stored below /config.</Overview>
   <Support>https://github.com/2CrAzYTV/Alarm-HUB/issues</Support>
   <Project>https://github.com/2CrAzYTV/Alarm-HUB</Project>
-  <TemplateURL>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/templates/alarm-hub.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/2CrAzYTV/unraid-community-apps/main/templates/alarm-hub.xml</TemplateURL>
   <ReadMe>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/README.md</ReadMe>
   <Category>Tools:</Category>
   <ExtraSearchTerms>alarm alarms wecker webcomm schedule shortcut ios automation commute routing</ExtraSearchTerms>
   <Requires>No separate PostgreSQL container is required for the default embedded database mode. For public Internet access, use a reverse proxy with a valid HTTPS certificate and enable secure session cookies. Commute routing is optional; OpenRouteService is used for address lookup plus Auto/Fahrrad routing, while Bus/Bahn uses the free open-source Transitous service.</Requires>
-  <Changes>Added optional commute-aware WebComm alarms. Auto and bicycle routing use OpenRouteService; Bus/Bahn uses the free open-source Transitous service with target arrival at shift start.</Changes>
+  <Changes>Community Apps metadata is maintained centrally in 2CrAzYTV/unraid-community-apps. Added optional commute-aware WebComm alarms. Auto and bicycle routing use OpenRouteService; Bus/Bahn uses Transitous with target arrival at shift start.</Changes>
   <Date>2026-08-23</Date>
   <MinVer>6.12</MinVer>
   <License>MIT</License>
