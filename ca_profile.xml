@@ -2,6 +2,6 @@
   <Profile>
     Alarm-HUB is a multi-user alarm service for Unraid with manual alarms, an API for mobile automations, optional WebComm Calendar Sync integration, and optional direct WebComm import. The standard Unraid deployment includes an embedded PostgreSQL database and persists its data below /config. Support and source code are available on GitHub.
   </Profile>
-  <Icon>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/icon.svg</Icon>
+  <Icon>https://github.com/2CrAzYTV/Alarm-HUB/raw/refs/heads/main/icon.png</Icon>
   <WebPage>https://github.com/2CrAzYTV/Alarm-HUB</WebPage>
 </CommunityApplications>
