@@ -207,7 +207,9 @@ def integrations_page_fixed(
 
       <div class='card'>
         <h3>WebComm-Startorte zuordnen</h3>
-        <p class='muted'>Jeder neue Wert aus dem Dienstplan erscheint hier automatisch, z. B. <code>BHOF</code> oder <code>BHOF-Siegen</code>. Hinterlege einmalig die echte Adresse. Die Zuordnung gilt anschließend automatisch für alle Schichten mit exakt diesem Startort.</p>
+        <p><b>Wichtig:</b> WebComm überträgt Startorte häufig nur als Kürzel, zum Beispiel <code>BHOF</code>. Solche Kürzel sind keine vollständigen Adressen und dürfen deshalb nicht automatisch für die Routenberechnung verwendet werden.</p>
+        <p class='muted'>Jeder neue Wert aus deinem Dienstplan erscheint hier automatisch, zum Beispiel <code>BHOF</code> oder <code>BHOF-Siegen</code>. Trage für jeden Startort einmalig die vollständige echte Adresse ein. Danach verwendet Alarm-HUB diese Zuordnung automatisch für alle zukünftigen Schichten mit genau diesem Startort.</p>
+        <p class='muted'>Wird später ein neuer, bisher unbekannter Startort gefunden, bleibt die Weckzeit zunächst bei der normalen Vorlaufzeit. Erst nachdem du die Adresse zugeordnet hast, wird die Wegezeit berücksichtigt. So verhindert Alarm-HUB falsche Routen und unplausible Weckzeiten.</p>
         {location_rows}
       </div>
 
