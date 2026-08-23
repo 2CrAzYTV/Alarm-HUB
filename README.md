@@ -43,6 +43,8 @@ Persist `/config` on the host, for example:
 
 A container update or Force Update therefore does not delete the database.
 
+If no `SECRET_KEY` is supplied in embedded mode, Alarm-HUB automatically generates a strong random key on first start and stores it persistently as `/config/secret_key`. This avoids extra setup while keeping sessions and encrypted direct-WebComm passwords stable across container updates.
+
 ### External PostgreSQL (advanced)
 
 ```text
@@ -50,7 +52,9 @@ DATABASE_MODE=external
 DATABASE_URL=postgresql+psycopg://user:password@host:5432/database
 ```
 
-Use this only if you deliberately want to manage PostgreSQL separately. The optional legacy/advanced Unraid template is available at:
+Use this only if you deliberately want to manage PostgreSQL separately. Existing installations that already define `DATABASE_URL` but do not yet define `DATABASE_MODE` continue to use their external PostgreSQL database for backward compatibility.
+
+The optional legacy/advanced Unraid PostgreSQL template remains available at:
 
 ```text
 unraid/alarm-hub-postgres.xml
@@ -59,16 +63,15 @@ unraid/alarm-hub-postgres.xml
 ## Docker
 The application image listens on port `8080`.
 
-Recommended runtime settings:
+Recommended settings for a new installation:
 
 ```text
 DATABASE_MODE=embedded
-SECRET_KEY=<long-random-secret>
 DEFAULT_TIMEZONE=Europe/Berlin
 SESSION_HTTPS_ONLY=true
 ```
 
-`SECRET_KEY` should be set once and then kept unchanged. Changing it invalidates sessions and also affects encryption of saved direct-WebComm passwords.
+`SECRET_KEY` is optional in embedded mode because it is generated persistently under `/config` if omitted. Advanced/external installations may continue supplying their own existing `SECRET_KEY`; changing an established key invalidates sessions and prevents decryption of previously saved direct-WebComm passwords.
 
 For public deployment, place Alarm Hub behind a reverse proxy with a valid public HTTPS certificate and keep `SESSION_HTTPS_ONLY=true`.
 
@@ -80,6 +83,6 @@ Alternatively, users without WebComm Calendar Sync can configure the direct WebC
 The user's WebComm offsets are configurable and may contain any number of values, e.g. `120,90,45` minutes before shift start.
 
 ## Unraid
-For the standard setup, install only `Alarm-HUB` from `unraid/alarm-hub.xml`. No second PostgreSQL container and no `.env` file are required.
+For a new standard setup, install only `Alarm-HUB` from `unraid/alarm-hub.xml`. The normal user only needs the WebUI port and `/config` appdata path; PostgreSQL and the application secret are handled automatically. No second PostgreSQL container and no `.env` file are required.
 
-The separate PostgreSQL template is retained only for advanced external-database deployments.
+For existing or advanced external-database deployments, set `DATABASE_MODE=external` and keep the existing `DATABASE_URL` and `SECRET_KEY`. The separate PostgreSQL template remains available for that use case.
