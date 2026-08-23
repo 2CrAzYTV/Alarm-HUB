@@ -48,11 +48,13 @@ DATABASE_URL=postgresql+psycopg://user:password@host:5432/database
 
 Use this only if you deliberately want to manage PostgreSQL separately. Existing installations that already define `DATABASE_URL` but do not yet define `DATABASE_MODE` continue to use their external PostgreSQL database for backward compatibility.
 
-The optional legacy/advanced Unraid PostgreSQL template remains available at:
+A legacy/advanced Unraid PostgreSQL template is retained as documentation at:
 
 ```text
-unraid/alarm-hub-postgres.xml
+unraid/alarm-hub-postgres.xml.example
 ```
+
+It deliberately does not use the `.xml` extension so Community Apps does not publish it as a separate application. Rename or copy it to an `.xml` file only for a manual advanced deployment.
 
 ## Docker
 The application image listens on port `8080`.
@@ -85,16 +87,17 @@ The Community Apps submission template is located at:
 templates/alarm-hub.xml
 ```
 
-The older/manual template is retained at `unraid/alarm-hub.xml` for compatibility. For existing or advanced external-database deployments, set `DATABASE_MODE=external` and keep the existing `DATABASE_URL` and `SECRET_KEY`. The separate PostgreSQL template remains available for that use case.
+An older/manual template is retained as `unraid/alarm-hub.xml.example` for reference without being detected as a second Community Apps application. For existing or advanced external-database deployments, set `DATABASE_MODE=external` and keep the existing `DATABASE_URL` and `SECRET_KEY`.
 
 ## Community Apps submission
 The repository is structured for the current Unraid Community Apps submission flow:
 
 - `ca_profile.xml` provides repository metadata.
-- `templates/alarm-hub.xml` is the Community Apps Docker template and contains its canonical raw `TemplateURL`.
-- `icon.png` is the PNG icon used by the Unraid templates and Community Apps profile; `icon.svg` remains the source artwork.
+- `templates/alarm-hub.xml` is the single Community Apps Docker template and contains its canonical raw `TemplateURL`.
+- `icon.png` is the PNG icon used by the Unraid template and Community Apps profile; `icon.svg` remains the source artwork.
 - `LICENSE` provides the OSI-approved MIT license.
 - `.github/workflows/community-apps.yml` checks XML syntax, required template metadata, icon references, and ensures no `.env` file is shipped.
+- Files below `unraid/` use the `.xml.example` suffix so they remain documentation/manual examples and are not published as additional Community Apps entries.
 
 Before publishing, run **Validate** and **Scan** in the Unraid Community Apps submission portal. The portal is the source of truth for final acceptance and may report requirements that are newer than the repository checks.
 
