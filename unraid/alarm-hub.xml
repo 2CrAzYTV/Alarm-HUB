@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Container version="2">
   <Name>Alarm-HUB</Name>
   <Repository>ghcr.io/2crazytv/alarm-hub:latest</Repository>
@@ -6,12 +6,16 @@
   <Network>bridge</Network>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/2CrAzYTV/Alarm-HUB</Support>
+  <Support>https://github.com/2CrAzYTV/Alarm-HUB/issues</Support>
   <Project>https://github.com/2CrAzYTV/Alarm-HUB</Project>
-  <Overview>Alarm-HUB ist ein eigenständiger Multi-User-Weckerdienst mit optionaler WebComm-Integration. Für normale Installationen ist PostgreSQL bereits integriert. Es wird kein zweiter Datenbank-Container benötigt; Datenbank und automatisch erzeugter Secret Key bleiben persistent unter /config erhalten. Externes PostgreSQL bleibt als Advanced-Option verfügbar.</Overview>
+  <Overview>Alarm-HUB ist ein eigenständiger Multi-User-Weckerdienst mit manuellen Weckern, API-Zugriff für mobile Automationen sowie optionaler WebComm-Integration und direktem WebComm-Import. Für normale Installationen ist PostgreSQL bereits integriert. Es wird kein zweiter Datenbank-Container benötigt; Datenbank und automatisch erzeugter Secret Key bleiben persistent unter /config erhalten. Externes PostgreSQL bleibt als Advanced-Option verfügbar.</Overview>
   <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
-  <Icon>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/assets/icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/icon.svg</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/unraid/alarm-hub.xml</TemplateURL>
+  <ReadMe>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/README.md</ReadMe>
+  <ExtraSearchTerms>alarm alarms wecker webcomm schedule shortcut ios automation</ExtraSearchTerms>
+  <License>MIT</License>
   <ExtraParams>--restart unless-stopped</ExtraParams>
   <PostArgs/>
   <CPUset/>
