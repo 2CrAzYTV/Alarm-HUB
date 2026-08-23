@@ -42,11 +42,12 @@ jobs:
           set -euo pipefail
           template='templates/alarm-hub.xml'
           icon_url='https://github.com/2CrAzYTV/Alarm-HUB/raw/refs/heads/main/icon.png'
+          ca_template_url='https://raw.githubusercontent.com/2CrAzYTV/unraid-community-apps/main/templates/alarm-hub.xml'
           for tag in Name Repository Registry Icon WebUI Overview Project TemplateURL ReadMe Category License; do
             grep -q "<$tag>" "$template" || { echo "Missing <$tag> in $template"; exit 1; }
           done
           grep -q '<CommunityApplications>' ca_profile.xml
-          grep -q 'https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/templates/alarm-hub.xml' "$template"
+          grep -q "$ca_template_url" "$template"
           grep -q "$icon_url" "$template"
           grep -q "$icon_url" ca_profile.xml
           test -s icon.png
