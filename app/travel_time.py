@@ -18,7 +18,7 @@ from . import main
 
 
 ORS_API_KEY = os.getenv("OPENROUTESERVICE_API_KEY", "").strip()
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+TRANSITOUS_API_BASE = os.getenv("TRANSITOUS_API_BASE", "https://api.transitous.org/api").rstrip("/")
 
 TRANSPORT_LABELS = {
     "car": "Auto",
@@ -48,27 +48,42 @@ def _cache_set(key: str, value, ttl_seconds: int) -> None:
         _cache[key] = (time_module.monotonic() + ttl_seconds, value)
 
 
-def _json_request(url: str, *, headers: dict[str, str] | None = None, payload: dict | None = None, timeout: float = 7.0) -> dict:
+def _json_request(
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    payload: dict | None = None,
+    timeout: float = 7.0,
+) -> dict:
     body = None
-    merged_headers = {"Accept": "application/json", "User-Agent": "Alarm-HUB/1.0"}
+    merged_headers = {
+        "Accept": "application/json",
+        "User-Agent": "Alarm-HUB/1.0 (+https://github.com/2CrAzYTV/Alarm-HUB)",
+    }
     if headers:
         merged_headers.update(headers)
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
         merged_headers["Content-Type"] = "application/json"
-    request = Request(url, data=body, headers=merged_headers, method="POST" if body is not None else "GET")
+    request = Request(
+        url,
+        data=body,
+        headers=merged_headers,
+        method="POST" if body is not None else "GET",
+    )
     with urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _parse_duration_seconds(value: str | None) -> float:
+def _parse_datetime(value: str | None) -> datetime | None:
     raw = (value or "").strip()
-    if not raw.endswith("s"):
-        return 0.0
+    if not raw:
+        return None
     try:
-        return max(0.0, float(raw[:-1]))
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
-        return 0.0
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def _ors_geocode(address: str) -> tuple[float, float] | None:
@@ -123,68 +138,70 @@ def _ors_duration_minutes(origin: str, destination: str, mode: str) -> int | Non
     return result
 
 
-def _google_transit_departure(origin: str, destination: str, arrival_at: datetime) -> tuple[datetime, int] | None:
-    if not GOOGLE_MAPS_API_KEY:
+def _transitous_departure(
+    origin: str,
+    destination: str,
+    arrival_at: datetime,
+) -> tuple[datetime, int] | None:
+    if not ORS_API_KEY:
+        return None
+
+    start = _ors_geocode(origin)
+    end = _ors_geocode(destination)
+    if not start or not end:
         return None
 
     arrival_utc = arrival_at.astimezone(timezone.utc).replace(microsecond=0)
     cache_key = (
-        f"google-transit:{origin.strip().casefold()}:{destination.strip().casefold()}:"
+        f"transitous:{start}:{end}:"
         f"{arrival_utc.strftime('%Y-%m-%dT%H:%M')}"
     )
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    payload = {
-        "origin": {"address": origin.strip()},
-        "destination": {"address": destination.strip()},
-        "travelMode": "TRANSIT",
-        "arrivalTime": arrival_utc.isoformat().replace("+00:00", "Z"),
-        "languageCode": "de-DE",
-        "regionCode": "DE",
+    params = {
+        "fromPlace": f"{start[1]},{start[0]}",
+        "toPlace": f"{end[1]},{end[0]}",
+        "time": arrival_utc.isoformat().replace("+00:00", "Z"),
+        "arriveBy": "true",
+        "timetableView": "false",
+        "transitModes": "TRANSIT",
+        "directModes": "",
+        "numItineraries": 1,
+        "maxItineraries": 3,
+        "language": "de",
     }
-    field_mask = (
-        "routes.duration,"
-        "routes.legs.steps.staticDuration,"
-        "routes.legs.steps.transitDetails.stopDetails.departureTime,"
-        "routes.legs.steps.transitDetails.stopDetails.arrivalTime"
-    )
 
     try:
         data = _json_request(
-            "https://routes.googleapis.com/directions/v2:computeRoutes",
-            headers={
-                "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-                "X-Goog-FieldMask": field_mask,
-            },
-            payload=payload,
+            f"{TRANSITOUS_API_BASE}/v6/plan?{urlencode(params)}",
+            timeout=10.0,
         )
-        route = data["routes"][0]
-        steps = route.get("legs", [{}])[0].get("steps", [])
-
-        pre_transit_seconds = 0.0
-        first_departure: datetime | None = None
-        for step in steps:
-            details = step.get("transitDetails") or {}
-            stop_details = details.get("stopDetails") or {}
-            departure_text = stop_details.get("departureTime")
-            if departure_text:
-                first_departure = datetime.fromisoformat(departure_text.replace("Z", "+00:00"))
-                break
-            pre_transit_seconds += _parse_duration_seconds(step.get("staticDuration"))
-
-        if first_departure is not None:
-            route_start = first_departure - timedelta(seconds=pre_transit_seconds)
-            lead_seconds = max(60.0, (arrival_utc - route_start.astimezone(timezone.utc)).total_seconds())
-            result = (route_start, max(1, math.ceil(lead_seconds / 60.0)))
-        else:
-            duration_seconds = _parse_duration_seconds(route.get("duration"))
+        candidates: list[tuple[datetime, datetime, int]] = []
+        for itinerary in data.get("itineraries", []):
+            departure = _parse_datetime(itinerary.get("startTime"))
+            arrival = _parse_datetime(itinerary.get("endTime"))
+            if not departure or not arrival:
+                continue
+            if arrival.astimezone(timezone.utc) > arrival_utc + timedelta(seconds=30):
+                continue
+            duration_seconds = int(itinerary.get("duration") or 0)
             if duration_seconds <= 0:
-                result = None
-            else:
-                route_start = arrival_utc - timedelta(seconds=duration_seconds)
-                result = (route_start, max(1, math.ceil(duration_seconds / 60.0)))
+                duration_seconds = max(60, int((arrival - departure).total_seconds()))
+            candidates.append((departure, arrival, duration_seconds))
+
+        if not candidates:
+            result = None
+        else:
+            departure, arrival, duration_seconds = max(
+                candidates,
+                key=lambda candidate: candidate[0],
+            )
+            result = (
+                departure,
+                max(1, math.ceil(duration_seconds / 60.0)),
+            )
     except Exception:
         result = None
 
@@ -192,7 +209,10 @@ def _google_transit_departure(origin: str, destination: str, arrival_at: datetim
     return result
 
 
-def _commute_for_shift(settings: integrations_ui.CommuteSettings, shift: main.WebCommShift) -> dict | None:
+def _commute_for_shift(
+    settings: integrations_ui.CommuteSettings,
+    shift: main.WebCommShift,
+) -> dict | None:
     destination = (shift.start_location or "").strip()
     origin = (settings.home_address or "").strip()
     if not settings.enabled or not origin or not destination:
@@ -206,7 +226,7 @@ def _commute_for_shift(settings: integrations_ui.CommuteSettings, shift: main.We
         return {"minutes": minutes, "departure": None, "mode": mode}
 
     if mode == "transit":
-        result = _google_transit_departure(origin, destination, shift.start)
+        result = _transitous_departure(origin, destination, shift.start)
         if result is None:
             return None
         departure, minutes = result
@@ -221,7 +241,10 @@ def upcoming_with_commute(user: main.User, db: Session, limit: int = 50) -> list
     items: list[dict] = []
 
     for alarm in db.scalars(
-        select(main.Alarm).where(main.Alarm.user_id == user.id, main.Alarm.enabled.is_(True))
+        select(main.Alarm).where(
+            main.Alarm.user_id == user.id,
+            main.Alarm.enabled.is_(True),
+        )
     ).all():
         at = main._next_manual_occurrence(alarm, user, now)
         if at:
@@ -286,7 +309,10 @@ def upcoming_with_commute(user: main.User, db: Session, limit: int = 50) -> list
                 if commute:
                     item["commute_minutes"] = int(commute["minutes"])
                     item["transport_mode"] = commute["mode"]
-                    item["transport_label"] = TRANSPORT_LABELS.get(commute["mode"], commute["mode"])
+                    item["transport_label"] = TRANSPORT_LABELS.get(
+                        commute["mode"],
+                        commute["mode"],
+                    )
                 elif settings and settings.enabled:
                     item["commute_unavailable"] = True
                 items.append(item)
