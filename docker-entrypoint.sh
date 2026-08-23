@@ -22,6 +22,31 @@ log() {
   printf '[Alarm-HUB] %s\n' "$*"
 }
 
+ensure_embedded_secret() {
+  # New embedded installations should work without requiring the user to invent
+  # a session/encryption key. Persist it below /config so Force Updates keep it.
+  if [[ -n "${SECRET_KEY:-}" ]]; then
+    return
+  fi
+
+  local secret_file="/config/secret_key"
+  mkdir -p /config
+
+  if [[ -s "${secret_file}" ]]; then
+    SECRET_KEY="$(cat "${secret_file}")"
+    export SECRET_KEY
+    log "Using persistent generated SECRET_KEY from /config."
+    return
+  fi
+
+  SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+  umask 077
+  printf '%s\n' "${SECRET_KEY}" > "${secret_file}"
+  chmod 600 "${secret_file}"
+  export SECRET_KEY
+  log "Generated persistent SECRET_KEY in /config."
+}
+
 stop_services() {
   local rc=$?
   trap - EXIT INT TERM
@@ -85,6 +110,7 @@ EOF
 
 case "${DATABASE_MODE,,}" in
   embedded|internal)
+    ensure_embedded_secret
     start_embedded_postgres
     ;;
   external)
