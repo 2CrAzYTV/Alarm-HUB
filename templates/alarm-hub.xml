@@ -15,8 +15,8 @@
   <ReadMe>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/README.md</ReadMe>
   <Category>Tools:</Category>
   <ExtraSearchTerms>alarm alarms wecker webcomm schedule shortcut ios automation commute routing</ExtraSearchTerms>
-  <Requires>No separate PostgreSQL container is required for the default embedded database mode. For public Internet access, use a reverse proxy with a valid HTTPS certificate and enable secure session cookies. Commute routing is optional and requires provider API keys.</Requires>
-  <Changes>Added optional commute-aware WebComm alarms. Auto and bicycle routing use OpenRouteService; Bus/Bahn uses Google Routes Transit with target arrival at shift start.</Changes>
+  <Requires>No separate PostgreSQL container is required for the default embedded database mode. For public Internet access, use a reverse proxy with a valid HTTPS certificate and enable secure session cookies. Commute routing is optional; OpenRouteService is used for address lookup plus Auto/Fahrrad routing, while Bus/Bahn uses the free open-source Transitous service.</Requires>
+  <Changes>Added optional commute-aware WebComm alarms. Auto and bicycle routing use OpenRouteService; Bus/Bahn uses the free open-source Transitous service with target arrival at shift start.</Changes>
   <Date>2026-08-23</Date>
   <MinVer>6.12</MinVer>
   <License>MIT</License>
@@ -28,6 +28,5 @@
   <Config Name="Secret Key" Target="SECRET_KEY" Default="" Mode="" Description="Optional in embedded mode: when left empty Alarm-HUB creates and persists a strong secret under /config. Set and keep a fixed value for external/managed deployments if desired." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
   <Config Name="Default Timezone" Target="DEFAULT_TIMEZONE" Default="Europe/Berlin" Mode="" Description="Default timezone for new users." Type="Variable" Display="advanced" Required="true" Mask="false">Europe/Berlin</Config>
   <Config Name="Secure Session Cookies" Target="SESSION_HTTPS_ONLY" Default="false" Mode="" Description="Default false for direct local HTTP access in Unraid. Set true when Alarm-HUB is published through an HTTPS reverse proxy." Type="Variable" Display="advanced" Required="true" Mask="false">false</Config>
-  <Config Name="OpenRouteService API Key" Target="OPENROUTESERVICE_API_KEY" Default="" Mode="" Description="Optional. Required only for commute routing by Auto or Fahrrad. Create an API key at openrouteservice.org." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
-  <Config Name="Google Maps API Key" Target="GOOGLE_MAPS_API_KEY" Default="" Mode="" Description="Optional. Required only for Bus/Bahn commute routing via Google Routes Transit. The Routes API must be enabled for this key." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="OpenRouteService API Key" Target="OPENROUTESERVICE_API_KEY" Default="" Mode="" Description="Optional. Required for commute routing because Alarm-HUB uses OpenRouteService for address lookup and for Auto/Fahrrad routes. Bus/Bahn itself is routed through Transitous and needs no extra API key." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
 </Container>
