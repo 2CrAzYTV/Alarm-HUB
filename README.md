@@ -17,12 +17,6 @@ Alarm Hub is a standalone multi-user alarm service. Manual alarms are the core f
 ## Configuration principle
 Alarm Hub does **not** use a `.env` file. Runtime configuration should be provided directly through the Docker/Unraid template wherever possible.
 
-The included Unraid template is located at:
-
-```text
-unraid/alarm-hub.xml
-```
-
 For a normal installation, only the Alarm-HUB container is required. PostgreSQL is included in the image and stores its persistent database below `/config/postgres`.
 
 ## Database modes
@@ -83,6 +77,29 @@ Alternatively, users without WebComm Calendar Sync can configure the direct WebC
 The user's WebComm offsets are configurable and may contain any number of values, e.g. `120,90,45` minutes before shift start.
 
 ## Unraid
-For a new standard setup, install only `Alarm-HUB` from `unraid/alarm-hub.xml`. The normal user only needs the WebUI port and `/config` appdata path; PostgreSQL and the application secret are handled automatically. No second PostgreSQL container and no `.env` file are required.
+For a new standard setup, install only `Alarm-HUB`. The normal user only needs the WebUI port and `/config` appdata path; PostgreSQL and the application secret are handled automatically. No second PostgreSQL container and no `.env` file are required.
 
-For existing or advanced external-database deployments, set `DATABASE_MODE=external` and keep the existing `DATABASE_URL` and `SECRET_KEY`. The separate PostgreSQL template remains available for that use case.
+The Community Apps submission template is located at:
+
+```text
+templates/alarm-hub.xml
+```
+
+The older/manual template is retained at `unraid/alarm-hub.xml` for compatibility. For existing or advanced external-database deployments, set `DATABASE_MODE=external` and keep the existing `DATABASE_URL` and `SECRET_KEY`. The separate PostgreSQL template remains available for that use case.
+
+## Community Apps submission
+The repository is structured for the current Unraid Community Apps submission flow:
+
+- `ca_profile.xml` provides repository metadata.
+- `templates/alarm-hub.xml` is the Community Apps Docker template and contains its canonical raw `TemplateURL`.
+- `icon.svg` is the repository/application icon.
+- `LICENSE` provides the OSI-approved MIT license.
+- `.github/workflows/community-apps.yml` checks XML syntax, required template metadata, canonical URLs, and ensures no `.env` file is shipped.
+
+Before publishing, run **Validate** and **Scan** in the Unraid Community Apps submission portal. The portal is the source of truth for final acceptance and may report requirements that are newer than the repository checks.
+
+## Support
+Please use GitHub Issues for bugs and support requests. Do not post passwords, API tokens, database credentials, session secrets, or other private data in issues or logs.
+
+## License
+Alarm-HUB is licensed under the MIT License. See `LICENSE`.
