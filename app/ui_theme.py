@@ -149,7 +149,7 @@ a:hover { text-decoration: none; }
   align-items: center !important;
 }
 
-input, select, textarea {
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
   width: 100%;
   max-width: 560px;
   background: #0d141c !important;
@@ -161,9 +161,20 @@ input, select, textarea {
   outline: none;
   transition: border-color .15s ease, box-shadow .15s ease;
 }
-input:focus, select:focus, textarea:focus {
+input:not([type="checkbox"]):not([type="radio"]):focus, select:focus, textarea:focus {
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+input[type="checkbox"], input[type="radio"] {
+  width: 18px !important;
+  height: 18px !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 8px 0 0 !important;
+  accent-color: #2477d4;
+  vertical-align: middle;
+  cursor: pointer;
 }
 label {
   display: block !important;
@@ -172,9 +183,16 @@ label {
   font-size: .92rem;
   font-weight: 560;
 }
-label input, label select, label textarea {
+label input:not([type="checkbox"]):not([type="radio"]), label select, label textarea {
   display: block;
   margin-top: 6px;
+}
+label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) {
+  display: flex !important;
+  align-items: center;
+  gap: 2px;
+  width: fit-content;
+  cursor: pointer;
 }
 
 button, .button, a.button {
