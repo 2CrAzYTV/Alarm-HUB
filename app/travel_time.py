@@ -212,10 +212,12 @@ def _transitous_departure(
 def _commute_for_shift(
     settings: integrations_ui.CommuteSettings,
     shift: main.WebCommShift,
+    mappings: dict[str, str],
 ) -> dict | None:
-    destination = (shift.start_location or "").strip()
+    source_location = (shift.start_location or "").strip()
     origin = (settings.home_address or "").strip()
-    if not settings.enabled or not origin or not destination:
+    destination = (mappings.get(source_location) or "").strip()
+    if not settings.enabled or not origin or not source_location or not destination:
         return None
 
     mode = settings.transport_mode
@@ -223,14 +225,24 @@ def _commute_for_shift(
         minutes = _ors_duration_minutes(origin, destination, mode)
         if minutes is None:
             return None
-        return {"minutes": minutes, "departure": None, "mode": mode}
+        return {
+            "minutes": minutes,
+            "departure": None,
+            "mode": mode,
+            "route_address": destination,
+        }
 
     if mode == "transit":
         result = _transitous_departure(origin, destination, shift.start)
         if result is None:
             return None
         departure, minutes = result
-        return {"minutes": minutes, "departure": departure, "mode": mode}
+        return {
+            "minutes": minutes,
+            "departure": departure,
+            "mode": mode,
+            "route_address": destination,
+        }
 
     return None
 
@@ -271,6 +283,15 @@ def upcoming_with_commute(user: main.User, db: Session, limit: int = 50) -> list
                 integrations_ui.CommuteSettings.user_id == user.id
             )
         )
+        mappings = {
+            mapping.source_location: mapping.route_address
+            for mapping in db.scalars(
+                select(integrations_ui.StartLocationMapping).where(
+                    integrations_ui.StartLocationMapping.user_id == user.id
+                )
+            ).all()
+            if (mapping.route_address or "").strip()
+        }
         shifts = db.scalars(
             select(main.WebCommShift)
             .where(
@@ -283,7 +304,9 @@ def upcoming_with_commute(user: main.User, db: Session, limit: int = 50) -> list
 
         for shift in shifts:
             local_start = shift.start.astimezone(tz)
-            commute = _commute_for_shift(settings, shift) if settings else None
+            commute = _commute_for_shift(settings, shift, mappings) if settings else None
+            source_location = (shift.start_location or "").strip()
+            mapped_address = (mappings.get(source_location) or "").strip()
             for offset in main._offsets(integration.offsets):
                 if commute and commute.get("departure") is not None:
                     route_departure = commute["departure"].astimezone(tz)
@@ -313,8 +336,13 @@ def upcoming_with_commute(user: main.User, db: Session, limit: int = 50) -> list
                         commute["mode"],
                         commute["mode"],
                     )
+                    item["route_address"] = commute["route_address"]
                 elif settings and settings.enabled:
                     item["commute_unavailable"] = True
+                    if source_location and not mapped_address:
+                        item["commute_unavailable_reason"] = "start_location_unmapped"
+                    else:
+                        item["commute_unavailable_reason"] = "routing_failed"
                 items.append(item)
 
     items.sort(key=lambda value: value["at"])
