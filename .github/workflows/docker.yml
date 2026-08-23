@@ -3,6 +3,12 @@ name: Build Alarm Hub image
 on:
   push:
     branches: [main]
+    paths:
+      - 'app/**'
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - 'docker-entrypoint.sh'
+      - '.github/workflows/docker.yml'
   workflow_dispatch:
 
 permissions:
