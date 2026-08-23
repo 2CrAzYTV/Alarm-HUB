@@ -29,7 +29,19 @@ def alarms_page_simple(
     </section>
     """
 
-    return HTMLResponse(main._layout("Meine Wecker", body, user))
+    html = main._layout("Meine Wecker", body, user)
+
+    # /alarms is provided through a route override. Ensure the navigation is
+    # identical to the rest of Alarm-HUB even if layout wrappers are loaded in
+    # a different order.
+    if "href='/'>Dashboard</a>" not in html:
+        html = html.replace(
+            "<a href='/alarms'>Meine Wecker</a>",
+            "<a href='/'>Dashboard</a><a href='/alarms'>Meine Wecker</a>",
+            1,
+        )
+
+    return HTMLResponse(html)
 
 
 def _install_override() -> None:
