@@ -10,5 +10,6 @@ from . import ui_theme  # noqa: F401
 from . import guides_dropdown  # noqa: F401
 from . import nav_dashboard  # noqa: F401
 from . import integrations_ui  # noqa: F401
+from . import travel_time  # noqa: F401
 
 app = main.app
