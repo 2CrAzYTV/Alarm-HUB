@@ -1,15 +1,42 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from html import escape
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import Boolean, ForeignKey, String, select
+from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from . import main
+
+
+class CommuteSettings(main.Base):
+    __tablename__ = "commute_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    home_address: Mapped[str] = mapped_column(String(320), default="")
+    transport_mode: Mapped[str] = mapped_column(String(32), default="car")
+
+
+TRANSPORT_MODES = {
+    "car": "Auto",
+    "transit": "Bus/Bahn",
+    "bicycle": "Fahrrad",
+}
+
+
+def _transport_options(selected: str) -> str:
+    return "".join(
+        f"<option value='{value}'{' selected' if value == selected else ''}>{label}</option>"
+        for value, label in TRANSPORT_MODES.items()
+    )
 
 
 def integrations_page_fixed(
@@ -48,7 +75,20 @@ def integrations_page_fixed(
     saved_note = ""
     if request.query_params.get("saved") == "1":
         saved_value = request.query_params.get("offsets") or offsets
-        saved_note = f"<p><b>✓ Vorlaufzeiten gespeichert: {saved_value} Minuten.</b></p>"
+        saved_note = f"<p><b>✓ Vorlaufzeiten gespeichert: {escape(saved_value)} Minuten.</b></p>"
+
+    commute = db.scalar(
+        select(CommuteSettings).where(CommuteSettings.user_id == user.id)
+    )
+    commute_enabled = bool(commute and commute.enabled)
+    home_address = commute.home_address if commute else ""
+    transport_mode = commute.transport_mode if commute else "car"
+    if transport_mode not in TRANSPORT_MODES:
+        transport_mode = "car"
+
+    commute_note = ""
+    if request.query_params.get("commute_saved") == "1":
+        commute_note = "<p><b>✓ Wegezeit-Einstellungen gespeichert.</b></p>"
 
     status_box = (
         "<div class='card'><h3>WebComm-Syncstatus</h3>"
@@ -76,6 +116,28 @@ def integrations_page_fixed(
             <input name='offsets' value='{offsets}' placeholder='120,90,45' required>
           </label>
           <button type='submit'>Vorlaufzeiten speichern</button>
+        </form>
+      </div>
+
+      <div class='card'>
+        <h3>Wegezeit zum Schichtbeginn</h3>
+        {commute_note}
+        <p class='muted'>Die Wegezeit wird später automatisch von deiner Heimatadresse zum in WebComm gelieferten Startort der Schicht berechnet und zusätzlich von der Weckzeit abgezogen.</p>
+        <form method='post' action='/integrations/commute'>
+          <input type='hidden' name='csrf' value='{token}'>
+          <label class='row'>
+            <input type='checkbox' name='enabled' value='1'{' checked' if commute_enabled else ''}>
+            Wegezeit bei WebComm-Weckern berücksichtigen
+          </label>
+          <label>Heimatadresse
+            <input name='home_address' value='{escape(home_address, quote=True)}' placeholder='Straße Hausnummer, PLZ Ort'>
+          </label>
+          <label>Verkehrsmittel
+            <select name='transport_mode'>
+              {_transport_options(transport_mode)}
+            </select>
+          </label>
+          <button type='submit'>Wegezeit-Einstellungen speichern</button>
         </form>
       </div>
 
@@ -120,7 +182,6 @@ def save_webcomm_offsets(
     db.commit()
     db.refresh(integration)
 
-    # Verify that the persisted value is exactly what we intended to save.
     if integration.offsets != normalized:
         raise HTTPException(500, "Vorlaufzeiten konnten nicht dauerhaft gespeichert werden.")
 
@@ -128,6 +189,49 @@ def save_webcomm_offsets(
         f"/integrations?saved=1&offsets={quote(normalized)}",
         303,
     )
+
+
+@main.app.post("/integrations/commute")
+def save_commute_settings(
+    request: Request,
+    home_address: str = Form(""),
+    transport_mode: str = Form("car"),
+    enabled: str | None = Form(None),
+    csrf: str = Form(...),
+    user: main.User = Depends(main.current_user),
+    db: Session = Depends(main.db_session),
+):
+    main._check_csrf(request, csrf)
+
+    if transport_mode not in TRANSPORT_MODES:
+        raise HTTPException(400, "Ungültiges Verkehrsmittel.")
+
+    normalized_address = home_address.strip()[:320]
+    is_enabled = enabled == "1"
+    if is_enabled and not normalized_address:
+        raise HTTPException(400, "Für die Wegezeit ist eine Heimatadresse erforderlich.")
+
+    settings = db.scalar(
+        select(CommuteSettings).where(CommuteSettings.user_id == user.id)
+    )
+    if not settings:
+        settings = CommuteSettings(user_id=user.id)
+        db.add(settings)
+
+    settings.enabled = is_enabled
+    settings.home_address = normalized_address
+    settings.transport_mode = transport_mode
+    db.commit()
+    db.refresh(settings)
+
+    if (
+        settings.enabled != is_enabled
+        or settings.home_address != normalized_address
+        or settings.transport_mode != transport_mode
+    ):
+        raise HTTPException(500, "Wegezeit-Einstellungen konnten nicht dauerhaft gespeichert werden.")
+
+    return RedirectResponse("/integrations?commute_saved=1", 303)
 
 
 def _install_override() -> None:
