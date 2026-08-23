@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import Boolean, ForeignKey, String, select
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from . import main
@@ -26,6 +26,20 @@ class CommuteSettings(main.Base):
     transport_mode: Mapped[str] = mapped_column(String(32), default="car")
 
 
+class StartLocationMapping(main.Base):
+    __tablename__ = "start_location_mappings"
+    __table_args__ = (
+        UniqueConstraint("user_id", "source_location", name="uq_start_location_mapping_user_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    source_location: Mapped[str] = mapped_column(String(160))
+    route_address: Mapped[str] = mapped_column(String(320), default="")
+
+
 TRANSPORT_MODES = {
     "car": "Auto",
     "transit": "Bus/Bahn",
@@ -38,6 +52,46 @@ def _transport_options(selected: str) -> str:
         f"<option value='{value}'{' selected' if value == selected else ''}>{label}</option>"
         for value, label in TRANSPORT_MODES.items()
     )
+
+
+def _location_rows(user: main.User, db: Session, shifts: list[main.WebCommShift], token: str) -> str:
+    discovered = sorted(
+        {
+            (shift.start_location or "").strip()
+            for shift in shifts
+            if (shift.start_location or "").strip()
+        },
+        key=str.casefold,
+    )
+    mappings = {
+        mapping.source_location: mapping
+        for mapping in db.scalars(
+            select(StartLocationMapping).where(StartLocationMapping.user_id == user.id)
+        ).all()
+    }
+
+    if not discovered:
+        return "<p class='muted'>Noch keine Startorte aus WebComm erkannt.</p>"
+
+    rows: list[str] = []
+    for source in discovered:
+        mapping = mappings.get(source)
+        address = mapping.route_address if mapping else ""
+        status = "✓ zugeordnet" if address.strip() else "⚠ Adresse fehlt – Wegezeit wird nicht verwendet"
+        rows.append(
+            "<div class='card'>"
+            f"<p><b>WebComm-Startort:</b> <code>{escape(source)}</code><br>"
+            f"<span class='muted'>{status}</span></p>"
+            "<form method='post' action='/integrations/commute/location'>"
+            f"<input type='hidden' name='csrf' value='{token}'>"
+            f"<input type='hidden' name='source_location' value='{escape(source, quote=True)}'>"
+            "<label>Echte Adresse für die Routenberechnung"
+            f"<input name='route_address' value='{escape(address, quote=True)}' "
+            "placeholder='Straße Hausnummer, PLZ Ort'></label>"
+            "<button type='submit'>Startort-Zuordnung speichern</button>"
+            "</form></div>"
+        )
+    return "".join(rows)
 
 
 def integrations_page_fixed(
@@ -90,10 +144,13 @@ def integrations_page_fixed(
     commute_note = ""
     if request.query_params.get("commute_saved") == "1":
         commute_note = "<p><b>✓ Wegezeit-Einstellungen gespeichert.</b></p>"
+    if request.query_params.get("location_saved") == "1":
+        commute_note += "<p><b>✓ Startort-Zuordnung gespeichert.</b></p>"
 
     ors_ready = bool(os.getenv("OPENROUTESERVICE_API_KEY", "").strip())
     ors_status = "bereit" if ors_ready else "API-Key fehlt"
     transitous_status = "bereit" if ors_ready else "OpenRouteService-Key für Adressauflösung fehlt"
+    location_rows = _location_rows(user, db, shifts, token)
 
     status_box = (
         "<div class='card'><h3>WebComm-Syncstatus</h3>"
@@ -127,7 +184,7 @@ def integrations_page_fixed(
       <div class='card'>
         <h3>Wegezeit zum Schichtbeginn</h3>
         {commute_note}
-        <p class='muted'>Alarm-HUB verwendet automatisch deine Heimatadresse und den von WebComm gelieferten Startort der jeweiligen Schicht. Die Weckzeit wird aus Schichtbeginn, benötigter Wegezeit und deiner Vorlaufzeit berechnet. Fehlt ein Startort oder kann keine Route berechnet werden, wird automatisch nur die normale Vorlaufzeit verwendet.</p>
+        <p class='muted'>Alarm-HUB verwendet deine Heimatadresse und eine von dir bestätigte Adresse für den jeweiligen WebComm-Startort. Neue Startort-Kürzel werden automatisch erkannt. Solange ein Startort nicht zugeordnet ist, wird für diese Schicht aus Sicherheitsgründen keine Wegezeit abgezogen und nur die normale Vorlaufzeit verwendet.</p>
         <p><b>Auto/Fahrrad:</b> OpenRouteService · {ors_status}<br><b>Bus/Bahn:</b> Transitous · {transitous_status}</p>
         <p class='muted'>Bus/Bahn wird über den freien Open-Source-Routingdienst <a href='https://transitous.org/' target='_blank' rel='noopener noreferrer'>Transitous</a> berechnet. Verwendete ÖPNV-Datenquellen und OpenStreetMap-Hinweise: <a href='https://transitous.org/sources/' target='_blank' rel='noopener noreferrer'>Transitous Sources</a>.</p>
         <form method='post' action='/integrations/commute'>
@@ -146,6 +203,12 @@ def integrations_page_fixed(
           </label>
           <button type='submit'>Wegezeit-Einstellungen speichern</button>
         </form>
+      </div>
+
+      <div class='card'>
+        <h3>WebComm-Startorte zuordnen</h3>
+        <p class='muted'>Jeder neue Wert aus dem Dienstplan erscheint hier automatisch, z. B. <code>BHOF</code> oder <code>BHOF-Siegen</code>. Hinterlege einmalig die echte Adresse. Die Zuordnung gilt anschließend automatisch für alle Schichten mit exakt diesem Startort.</p>
+        {location_rows}
       </div>
 
       <div class='card'>
@@ -239,6 +302,46 @@ def save_commute_settings(
         raise HTTPException(500, "Wegezeit-Einstellungen konnten nicht dauerhaft gespeichert werden.")
 
     return RedirectResponse("/integrations?commute_saved=1", 303)
+
+
+@main.app.post("/integrations/commute/location")
+def save_start_location_mapping(
+    request: Request,
+    source_location: str = Form(...),
+    route_address: str = Form(""),
+    csrf: str = Form(...),
+    user: main.User = Depends(main.current_user),
+    db: Session = Depends(main.db_session),
+):
+    main._check_csrf(request, csrf)
+    source = source_location.strip()[:160]
+    address = route_address.strip()[:320]
+    if not source:
+        raise HTTPException(400, "WebComm-Startort fehlt.")
+
+    known = db.scalar(
+        select(main.WebCommShift.id).where(
+            main.WebCommShift.user_id == user.id,
+            main.WebCommShift.start_location == source,
+        )
+    )
+    if known is None:
+        raise HTTPException(400, "Dieser WebComm-Startort ist nicht in deinen importierten Schichten vorhanden.")
+
+    mapping = db.scalar(
+        select(StartLocationMapping).where(
+            StartLocationMapping.user_id == user.id,
+            StartLocationMapping.source_location == source,
+        )
+    )
+    if not mapping:
+        mapping = StartLocationMapping(user_id=user.id, source_location=source)
+        db.add(mapping)
+    mapping.route_address = address
+    db.commit()
+    db.refresh(mapping)
+
+    return RedirectResponse("/integrations?location_saved=1", 303)
 
 
 def _install_override() -> None:
