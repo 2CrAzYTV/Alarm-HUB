@@ -57,17 +57,17 @@ unraid/alarm-hub-postgres.xml
 ## Docker
 The application image listens on port `8080`.
 
-Recommended settings for a new installation:
+Recommended settings for a new local Unraid installation:
 
 ```text
 DATABASE_MODE=embedded
 DEFAULT_TIMEZONE=Europe/Berlin
-SESSION_HTTPS_ONLY=true
+SESSION_HTTPS_ONLY=false
 ```
 
 `SECRET_KEY` is optional in embedded mode because it is generated persistently under `/config` if omitted. Advanced/external installations may continue supplying their own existing `SECRET_KEY`; changing an established key invalidates sessions and prevents decryption of previously saved direct-WebComm passwords.
 
-For public deployment, place Alarm Hub behind a reverse proxy with a valid public HTTPS certificate and keep `SESSION_HTTPS_ONLY=true`.
+For public deployment, place Alarm Hub behind a reverse proxy with a valid public HTTPS certificate and set `SESSION_HTTPS_ONLY=true`.
 
 ## WebComm integration
 A logged-in user can create an integration token on the Integrations page. WebComm Calendar Sync can then POST future shifts to `/api/v1/integrations/webcomm/shifts` with `Authorization: Bearer <token>`.
@@ -92,9 +92,9 @@ The repository is structured for the current Unraid Community Apps submission fl
 
 - `ca_profile.xml` provides repository metadata.
 - `templates/alarm-hub.xml` is the Community Apps Docker template and contains its canonical raw `TemplateURL`.
-- `icon.svg` is the repository/application icon.
+- `icon.png` is the PNG icon used by the Unraid templates and Community Apps profile; `icon.svg` remains the source artwork.
 - `LICENSE` provides the OSI-approved MIT license.
-- `.github/workflows/community-apps.yml` checks XML syntax, required template metadata, canonical URLs, and ensures no `.env` file is shipped.
+- `.github/workflows/community-apps.yml` checks XML syntax, required template metadata, icon references, and ensures no `.env` file is shipped.
 
 Before publishing, run **Validate** and **Scan** in the Unraid Community Apps submission portal. The portal is the source of truth for final acceptance and may report requirements that are newer than the repository checks.
 
