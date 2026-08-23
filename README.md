@@ -8,8 +8,10 @@ Alarm Hub is a standalone multi-user alarm service. Manual alarms are the core f
 - Repeating weekdays or one-time alarms
 - Per-user timezone
 - Optional WebComm sync via personal integration token
+- Optional direct WebComm import
 - API endpoint for upcoming alarms (for iOS Shortcuts / Android automation)
-- PostgreSQL backend
+- Embedded PostgreSQL by default
+- Optional external PostgreSQL for advanced setups
 - Docker deployment behind a reverse proxy
 
 ## Configuration principle
@@ -21,38 +23,63 @@ The included Unraid template is located at:
 unraid/alarm-hub.xml
 ```
 
-It contains the relevant container settings and environment variables, including the WebUI port, database connection, application secret, timezone and secure-session setting.
+For a normal installation, only the Alarm-HUB container is required. PostgreSQL is included in the image and stores its persistent database below `/config/postgres`.
 
-## Architecture
-Alarm Hub never needs direct access to a private WebComm instance. WebComm pushes shift data outbound to Alarm Hub using a per-user token.
+## Database modes
 
-## Docker
-The application image listens on port `8080`. For Unraid, use the included template. For another Docker host, pass the required environment variables directly to the container or through your orchestration platform rather than using a `.env` file.
-
-Required runtime settings:
+### Embedded PostgreSQL (default)
 
 ```text
-DATABASE_URL
-SECRET_KEY
+DATABASE_MODE=embedded
 ```
 
-Optional/defaulted settings:
+This is the recommended mode for normal Unraid installations. Alarm-HUB starts its own PostgreSQL instance inside the same container. The database only listens on a local Unix socket and is not exposed on the Docker network.
+
+Persist `/config` on the host, for example:
 
 ```text
+/mnt/user/appdata/alarm-hub -> /config
+```
+
+A container update or Force Update therefore does not delete the database.
+
+### External PostgreSQL (advanced)
+
+```text
+DATABASE_MODE=external
+DATABASE_URL=postgresql+psycopg://user:password@host:5432/database
+```
+
+Use this only if you deliberately want to manage PostgreSQL separately. The optional legacy/advanced Unraid template is available at:
+
+```text
+unraid/alarm-hub-postgres.xml
+```
+
+## Docker
+The application image listens on port `8080`.
+
+Recommended runtime settings:
+
+```text
+DATABASE_MODE=embedded
+SECRET_KEY=<long-random-secret>
 DEFAULT_TIMEZONE=Europe/Berlin
 SESSION_HTTPS_ONLY=true
 ```
 
+`SECRET_KEY` should be set once and then kept unchanged. Changing it invalidates sessions and also affects encryption of saved direct-WebComm passwords.
+
 For public deployment, place Alarm Hub behind a reverse proxy with a valid public HTTPS certificate and keep `SESSION_HTTPS_ONLY=true`.
 
 ## WebComm integration
-A logged-in user creates an integration token on the Integrations page. WebComm can then POST future shifts to `/api/v1/integrations/webcomm/shifts` with `Authorization: Bearer <token>`.
+A logged-in user can create an integration token on the Integrations page. WebComm Calendar Sync can then POST future shifts to `/api/v1/integrations/webcomm/shifts` with `Authorization: Bearer <token>`.
+
+Alternatively, users without WebComm Calendar Sync can configure the direct WebComm import inside Alarm-HUB. Direct-import credentials are stored per user, with the password encrypted before it is written to PostgreSQL.
 
 The user's WebComm offsets are configurable and may contain any number of values, e.g. `120,90,45` minutes before shift start.
 
-## Agenda
-- Add an optional **All-in-One / embedded PostgreSQL mode** for simpler Unraid installation.
-- Default mode should allow Alarm Hub and PostgreSQL to run from one container while keeping the database persistent outside the disposable container filesystem.
-- Keep the current external PostgreSQL setup available as an advanced mode.
-- Planned configuration concept: `DATABASE_MODE=embedded` by default, with `DATABASE_MODE=external` plus `DATABASE_URL` for external databases.
-- Update the Unraid template accordingly so normal users do not need to install and configure a separate PostgreSQL container.
+## Unraid
+For the standard setup, install only `Alarm-HUB` from `unraid/alarm-hub.xml`. No second PostgreSQL container and no `.env` file are required.
+
+The separate PostgreSQL template is retained only for advanced external-database deployments.
