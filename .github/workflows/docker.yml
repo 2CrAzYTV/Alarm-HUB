@@ -16,16 +16,87 @@ permissions:
   packages: write
 
 jobs:
-  build:
+  build-test-publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+
+      - name: Build image for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: alarm-hub-ci:smoke
+
+      - name: Smoke test embedded installation and WebUI
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker run -d \
+            --name alarm-hub-smoke \
+            -p 18080:8080 \
+            -e DATABASE_MODE=embedded \
+            -e SESSION_HTTPS_ONLY=false \
+            -e DEFAULT_TIMEZONE=Europe/Berlin \
+            -e SECRET_KEY=ci-smoke-secret-not-for-production \
+            alarm-hub-ci:smoke
+
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "--- Alarm-HUB container logs ---"
+              docker logs alarm-hub-smoke || true
+            fi
+            docker rm -f alarm-hub-smoke >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for _ in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18080/health | grep -q '"ok":true'; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" = "1"
+
+          curl -fsS http://127.0.0.1:18080/ | grep -q 'Alarm Hub'
+          curl -fsS -c cookies.txt http://127.0.0.1:18080/register > register.html
+          csrf="$(sed -n "s/.*name='csrf' value='\([^']*\)'.*/\1/p" register.html | head -n1)"
+          test -n "$csrf"
+
+          curl -fsS -L \
+            -b cookies.txt -c cookies.txt \
+            --data-urlencode "csrf=$csrf" \
+            --data-urlencode "email=ci-smoke@example.invalid" \
+            --data-urlencode "password=AlarmHub-Smoke-2026!" \
+            --data-urlencode "timezone_name=Europe/Berlin" \
+            http://127.0.0.1:18080/register > dashboard.html
+
+          grep -q 'Dashboard' dashboard.html
+          grep -q 'alarmhub-ui-refresh' dashboard.html
+
+          curl -fsS -b cookies.txt http://127.0.0.1:18080/alarms | grep -q 'Meine Wecker'
+          curl -fsS -b cookies.txt http://127.0.0.1:18080/integrations | grep -q 'Integrationen'
+          curl -fsS -b cookies.txt http://127.0.0.1:18080/devices | grep -q 'Geräte / API'
+          curl -fsS -b cookies.txt http://127.0.0.1:18080/guides > guides.html
+          grep -q 'Anleitungen' guides.html
+          grep -q 'routinehub.co/shortcut/21697/' guides.html
+          grep -q 'routinehub.co/download/59565/' guides.html
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+
+      - name: Publish image
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
