@@ -12,5 +12,6 @@ from . import nav_dashboard  # noqa: F401
 from . import integrations_ui  # noqa: F401
 from . import travel_time  # noqa: F401
 from . import start_locations_api  # noqa: F401
+from . import calendar_files  # noqa: F401
 
 app = main.app
