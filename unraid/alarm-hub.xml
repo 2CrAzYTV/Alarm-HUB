@@ -4,11 +4,11 @@
   <Repository>ghcr.io/2crazytv/alarm-hub:latest</Repository>
   <Registry>https://ghcr.io/2crazytv/alarm-hub</Registry>
   <Network>bridge</Network>
-  <Shell>sh</Shell>
+  <Shell>bash</Shell>
   <Privileged>false</Privileged>
   <Support>https://github.com/2CrAzYTV/Alarm-HUB</Support>
   <Project>https://github.com/2CrAzYTV/Alarm-HUB</Project>
-  <Overview>Alarm Hub ist ein eigenständiger Multi-User-Weckerdienst. Benutzer können beliebig viele eigene Wecker verwalten; WebComm ist nur eine optionale Integration. Für den öffentlichen Betrieb wird ein Reverse Proxy mit gültigem HTTPS-Zertifikat empfohlen.</Overview>
+  <Overview>Alarm-HUB ist ein eigenständiger Multi-User-Weckerdienst mit optionaler WebComm-Integration. PostgreSQL ist standardmäßig direkt im Alarm-HUB-Container enthalten, sodass kein separater Datenbank-Container benötigt wird. Die Datenbank wird persistent unter /config gespeichert. Eine externe PostgreSQL-Datenbank kann weiterhin im Advanced-Modus verwendet werden.</Overview>
   <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <Icon>https://raw.githubusercontent.com/2CrAzYTV/Alarm-HUB/main/assets/icon.png</Icon>
@@ -18,10 +18,12 @@
   <DateInstalled/>
   <DonateText/>
   <DonateLink/>
-  <Requires>Benötigt eine erreichbare PostgreSQL-Datenbank. Für Internetzugriff Reverse Proxy/HTTPS verwenden.</Requires>
+  <Requires>Keine separate PostgreSQL-Installation erforderlich. Für öffentlichen Internetzugriff Reverse Proxy mit gültigem HTTPS-Zertifikat verwenden.</Requires>
   <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="Port der Alarm-HUB WebUI" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
-  <Config Name="Database URL" Target="DATABASE_URL" Default="postgresql+psycopg://alarmhub:alarmhub@alarm-hub-db:5432/alarmhub" Mode="" Description="SQLAlchemy PostgreSQL-Verbindungs-URL" Type="Variable" Display="always" Required="true" Mask="false">postgresql+psycopg://alarmhub:alarmhub@alarm-hub-db:5432/alarmhub</Config>
-  <Config Name="Secret Key" Target="SECRET_KEY" Default="" Mode="" Description="Langer zufälliger Schlüssel für Sitzungen. Vor öffentlichem Betrieb zwingend setzen." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Appdata" Target="/config" Default="/mnt/user/appdata/alarm-hub" Mode="rw" Description="Persistente Alarm-HUB-Daten inklusive eingebetteter PostgreSQL-Datenbank" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/alarm-hub</Config>
+  <Config Name="Database Mode" Target="DATABASE_MODE" Default="embedded" Mode="" Description="embedded = integrierte PostgreSQL-Datenbank (empfohlen); external = eigene PostgreSQL-Datenbank verwenden" Type="Variable" Display="advanced" Required="true" Mask="false">embedded</Config>
+  <Config Name="External Database URL" Target="DATABASE_URL" Default="" Mode="" Description="Nur bei DATABASE_MODE=external erforderlich. SQLAlchemy PostgreSQL-Verbindungs-URL, z. B. postgresql+psycopg://user:pass@host:5432/db" Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="Secret Key" Target="SECRET_KEY" Default="" Mode="" Description="Langer zufälliger Schlüssel für Sitzungen. Vor öffentlichem Betrieb zwingend setzen und danach nicht mehr ändern." Type="Variable" Display="always" Required="true" Mask="true"></Config>
   <Config Name="Default Timezone" Target="DEFAULT_TIMEZONE" Default="Europe/Berlin" Mode="" Description="Standard-Zeitzone für neue Benutzer" Type="Variable" Display="advanced" Required="true" Mask="false">Europe/Berlin</Config>
   <Config Name="Secure Session Cookies" Target="SESSION_HTTPS_ONLY" Default="true" Mode="" Description="Bei öffentlichem HTTPS-Betrieb true verwenden. Für rein lokalen HTTP-Test vorübergehend false." Type="Variable" Display="advanced" Required="true" Mask="false">true</Config>
 </Container>
