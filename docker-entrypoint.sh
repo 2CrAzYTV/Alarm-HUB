@@ -1,7 +1,18 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-DATABASE_MODE="${DATABASE_MODE:-embedded}"
+# Backward compatibility:
+# Existing Alarm-HUB installations from before embedded PostgreSQL already have
+# DATABASE_URL configured but no DATABASE_MODE. Keep those on their external DB
+# until the administrator explicitly switches them to embedded mode.
+if [[ -n "${DATABASE_MODE:-}" ]]; then
+  DATABASE_MODE="${DATABASE_MODE}"
+elif [[ -n "${DATABASE_URL:-}" ]]; then
+  DATABASE_MODE="external"
+else
+  DATABASE_MODE="embedded"
+fi
+
 PGDATA="${PGDATA:-/config/postgres}"
 PGSOCKET="/var/run/postgresql"
 APP_PID=""
