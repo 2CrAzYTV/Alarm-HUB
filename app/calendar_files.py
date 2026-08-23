@@ -62,8 +62,8 @@ def _validate_period(period: str) -> str:
     return value
 
 
-def _public_path(token: str) -> str:
-    return f"/public/calendar-files/{token}"
+def _calendar_path(token: str) -> str:
+    return f"/calendar-files/{token}"
 
 
 @main.app.post("/api/v1/integrations/webcomm/calendar-files")
@@ -146,12 +146,12 @@ async def upload_calendar_file(
         "kind": record.kind,
         "changed": changed,
         "content_sha256": record.content_sha256,
-        "public_path": _public_path(record.public_token),
+        "calendar_path": _calendar_path(record.public_token),
     }
 
 
-@main.app.get("/public/calendar-files/{token}")
-def public_calendar_file(token: str, db: Session = Depends(main.db_session)):
+@main.app.get("/calendar-files/{token}")
+def calendar_file(token: str, db: Session = Depends(main.db_session)):
     if len(token) < 32:
         raise HTTPException(404, "Datei nicht gefunden.")
 
