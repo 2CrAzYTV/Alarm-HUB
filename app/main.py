@@ -128,14 +128,312 @@ def current_user(request: Request, db: Session = Depends(db_session)) -> User:
     return user
 
 
+# Merged into the base <style> block below. Kept as its own constant (rather
+# than inlined) because it was originally a standalone theme layer.
+THEME_CSS = r"""
+<style id="alarmhub-ui-refresh">
+:root {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --surface: #111821;
+  --surface-soft: #151e28;
+  --surface-hover: #1a2632;
+  --border: #263241;
+  --border-soft: #1d2834;
+  --text: #edf3f8;
+  --muted: #94a3b3;
+  --accent: #5da8ff;
+  --accent-soft: rgba(93, 168, 255, .12);
+  --success: #2fbf71;
+  --danger: #d95454;
+  --shadow: 0 18px 48px rgba(0, 0, 0, .20);
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% -10%, rgba(67, 120, 190, .11), transparent 34rem),
+    var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+nav {
+  max-width: 1120px !important;
+  margin: 0 auto !important;
+  padding: 14px 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: wrap !important;
+  border: 0 !important;
+}
+nav::before {
+  content: "Alarm-HUB";
+  margin-right: auto;
+  font-size: 1.02rem;
+  font-weight: 760;
+  letter-spacing: -.02em;
+  color: var(--text);
+}
+nav > a:first-of-type { display: none; }
+nav a {
+  color: var(--muted) !important;
+  padding: 8px 11px;
+  border-radius: 10px;
+  font-size: .91rem;
+  font-weight: 570;
+  transition: background .15s ease, color .15s ease;
+}
+nav a:hover {
+  color: var(--text) !important;
+  background: var(--surface-hover);
+}
+
+body > nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  max-width: none !important;
+  padding-left: max(22px, calc((100vw - 1120px) / 2)) !important;
+  padding-right: max(22px, calc((100vw - 1120px) / 2)) !important;
+  background: rgba(11, 15, 20, .88);
+  border-bottom: 1px solid rgba(38, 50, 65, .72) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+main {
+  max-width: 1040px !important;
+  margin: 0 auto !important;
+  padding: 38px 22px 70px !important;
+}
+main > h1 {
+  margin: 0 0 26px;
+  font-size: clamp(1.8rem, 4vw, 2.45rem);
+  line-height: 1.1;
+  letter-spacing: -.035em;
+}
+
+h2, h3 { letter-spacing: -.02em; }
+h2 { margin-top: 0; font-size: 1.22rem; }
+h3 { margin-top: 0; font-size: 1.02rem; }
+p { margin: .65rem 0; }
+
+section {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: var(--radius) !important;
+  padding: 22px !important;
+  margin: 0 0 18px !important;
+  box-shadow: none !important;
+}
+section + section { margin-top: 18px !important; }
+
+.card {
+  background: var(--surface-soft) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: 13px !important;
+  padding: 16px 17px !important;
+  margin: 14px 0 !important;
+  box-shadow: none !important;
+}
+.card:last-child { margin-bottom: 0 !important; }
+
+/* Long beginner guides stay readable instead of looking like dozens of heavy panels. */
+#ios .card, #android .card {
+  background: transparent !important;
+  border: 0 !important;
+  border-top: 1px solid var(--border-soft) !important;
+  border-radius: 0 !important;
+  padding: 18px 0 4px !important;
+  margin: 14px 0 0 !important;
+}
+#ios .card:first-of-type, #android .card:first-of-type {
+  border-top: 0 !important;
+  padding-top: 4px !important;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover { text-decoration: none; }
+
+.row {
+  display: flex !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+  width: 100%;
+  max-width: 560px;
+  background: #0d141c !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  min-height: 42px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+input:not([type="checkbox"]):not([type="radio"]):focus, select:focus, textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+input[type="checkbox"], input[type="radio"] {
+  width: 18px !important;
+  height: 18px !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 8px 0 0 !important;
+  accent-color: #2477d4;
+  vertical-align: middle;
+  cursor: pointer;
+}
+label {
+  display: block !important;
+  margin: 13px 0 !important;
+  color: #cbd6e1;
+  font-size: .92rem;
+  font-weight: 560;
+}
+label input:not([type="checkbox"]):not([type="radio"]), label select, label textarea {
+  display: block;
+  margin-top: 6px;
+}
+label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) {
+  display: flex !important;
+  align-items: center;
+  gap: 2px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+button, .button, a.button {
+  appearance: none;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  padding: 9px 14px !important;
+  min-height: 40px;
+  background: #2477d4 !important;
+  color: #fff !important;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform .12s ease, filter .12s ease;
+}
+button:hover, .button:hover, a.button:hover { filter: brightness(1.08); }
+button:active { transform: translateY(1px); }
+button.danger {
+  background: transparent !important;
+  border-color: rgba(217, 84, 84, .42) !important;
+  color: #ff9696 !important;
+}
+
+.alarm {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 16px !important;
+  padding: 15px 2px !important;
+  border-top: 1px solid var(--border-soft) !important;
+}
+.alarm:first-of-type { border-top: 0 !important; }
+.alarm b { font-size: .98rem; }
+
+.muted {
+  color: var(--muted) !important;
+  font-size: .9rem;
+}
+
+code {
+  color: #c6dcf5;
+  background: #0b1219;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  padding: 2px 6px;
+  word-break: break-word !important;
+}
+pre {
+  overflow-x: auto;
+  padding: 14px;
+  background: #0b1219;
+  border: 1px solid var(--border-soft);
+  border-radius: 11px;
+}
+pre code { border: 0; padding: 0; background: transparent; }
+
+ol, ul { padding-left: 1.35rem; }
+li { margin: .42rem 0; }
+hr { border: 0; border-top: 1px solid var(--border-soft); margin: 22px 0; }
+
+details {
+  background: var(--surface-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 13px 15px;
+  margin: 14px 0;
+}
+summary {
+  cursor: pointer;
+  font-weight: 680;
+  color: #dbe7f1;
+}
+details[open] summary { margin-bottom: 14px; }
+
+@media (max-width: 720px) {
+  body > nav {
+    position: static;
+    padding: 12px 14px !important;
+  }
+  nav::before { width: 100%; margin-bottom: 4px; }
+  nav a { padding: 7px 9px; font-size: .86rem; }
+  main { padding: 28px 14px 54px !important; }
+  main > h1 { margin-bottom: 20px; }
+  section { padding: 17px !important; border-radius: 14px !important; }
+  .alarm { align-items: flex-start !important; flex-direction: column; }
+  .alarm form, .alarm button { width: 100%; }
+}
+</style>
+"""
+
+
 def _layout(title: str, body: str, user: User | None = None) -> str:
     nav = "<a href='/'>Alarm Hub</a>"
     if user:
-        nav += "<a href='/alarms'>Meine Wecker</a><a href='/integrations'>Integrationen</a><a href='/devices'>Geräte / API</a><a href='/logout'>Abmelden</a>"
+        nav += (
+            "<a href='/'>Dashboard</a>"
+            "<a href='/alarms'>Meine Wecker</a>"
+            "<a href='/integrations'>Integrationen</a>"
+            "<a href='/webcomm-direct'>WebComm direkt</a>"
+            "<a href='/webcomm-data'>WebComm-Daten</a>"
+            "<a href='/devices'>Geräte / API</a>"
+            "<a href='/guides'>Anleitungen</a>"
+            "<a href='/logout'>Abmelden</a>"
+        )
     else:
         nav += "<a href='/login'>Anmelden</a><a href='/register'>Registrieren</a>"
-    return f"""<!doctype html><html lang='de'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{title} · Alarm Hub</title><style>
-:root{{color-scheme:dark}}body{{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;margin:0}}main,nav{{max-width:980px;margin:auto;padding:20px}}nav{{display:flex;gap:14px;flex-wrap:wrap;border-bottom:1px solid #30363d}}a{{color:#58a6ff;text-decoration:none}}section,.card{{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:18px;margin:16px 0}}input,select,button{{box-sizing:border-box;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:9px;padding:10px}}label{{display:block;margin:10px 0}}button{{background:#238636;cursor:pointer}}button.danger{{background:#8b2525}}.row{{display:flex;gap:10px;flex-wrap:wrap;align-items:center}}.muted{{color:#8b949e}}.alarm{{display:flex;justify-content:space-between;gap:12px;align-items:center;border-top:1px solid #30363d;padding:12px 0}}code{{word-break:break-all}}</style></head><body><nav>{nav}</nav><main><h1>{title}</h1>{body}</main></body></html>"""
+    head = (
+        "<style>\n"
+        ":root{color-scheme:dark}body{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;margin:0}"
+        "main,nav{max-width:980px;margin:auto;padding:20px}nav{display:flex;gap:14px;flex-wrap:wrap;border-bottom:1px solid #30363d}"
+        "a{color:#58a6ff;text-decoration:none}section,.card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:18px;margin:16px 0}"
+        "input,select,button{box-sizing:border-box;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:9px;padding:10px}"
+        "label{display:block;margin:10px 0}button{background:#238636;cursor:pointer}button.danger{background:#8b2525}"
+        ".row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.muted{color:#8b949e}"
+        ".alarm{display:flex;justify-content:space-between;gap:12px;align-items:center;border-top:1px solid #30363d;padding:12px 0}"
+        "code{word-break:break-all}</style>" + THEME_CSS
+    )
+    return f"<!doctype html><html lang='de'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{title} · Alarm Hub</title>{head}</head><body><nav>{nav}</nav><main><h1>{title}</h1>{body}</main></body></html>"
 
 
 def _next_manual_occurrence(alarm: Alarm, user: User, now: datetime) -> datetime | None:
@@ -270,9 +568,37 @@ def logout(request: Request):
 def alarms_page(request: Request, user: User = Depends(current_user), db: Session = Depends(db_session)):
     token = _csrf(request)
     alarms = db.scalars(select(Alarm).where(Alarm.user_id == user.id).order_by(Alarm.hour, Alarm.minute)).all()
-    rows = "".join(f"<div class='alarm'><div><b>{a.hour:02d}:{a.minute:02d} · {a.name}</b><br><span class='muted'>{'einmalig '+str(a.one_time_date) if a.one_time_date else 'Wochentage '+a.weekdays} · {'aktiv' if a.enabled else 'inaktiv'}</span></div><form method='post' action='/alarms/{a.id}/delete'><input type='hidden' name='csrf' value='{token}'><button class='danger'>Löschen</button></form></div>" for a in alarms) or "<p class='muted'>Noch keine manuellen Wecker.</p>"
-    form = f"<section><h2>Wecker hinzufügen</h2><form method='post' action='/alarms'><input type='hidden' name='csrf' value='{token}'><label>Name<input name='name' required placeholder='z. B. Frühschicht'></label><label>Uhrzeit<input type='time' name='alarm_time' required></label><label>Wochentage (0=Mo … 6=So)<input name='weekdays' value='0,1,2,3,4,5,6'></label><label>Einmaliges Datum (optional)<input type='date' name='one_time_date'></label><button>Wecker speichern</button></form></section>"
-    return HTMLResponse(_layout("Meine Wecker", form + f"<section><h2>Vorhandene Wecker</h2>{rows}</section>", user))
+    rows = "".join(
+        f"<div class='alarm'><div><b>{a.hour:02d}:{a.minute:02d} · {a.name}</b>"
+        f"<br><span class='muted'>{'einmalig ' + str(a.one_time_date) if a.one_time_date else 'Wochentage ' + a.weekdays}"
+        f" · {'aktiv' if a.enabled else 'inaktiv'}</span></div>"
+        f"<form method='post' action='/alarms/{a.id}/delete'>"
+        f"<input type='hidden' name='csrf' value='{token}'>"
+        f"<button class='danger'>Löschen</button></form></div>"
+        for a in alarms
+    ) or "<p class='muted'>Noch keine manuellen Wecker.</p>"
+
+    body = f"""
+    <section>
+      <h2>Wecker hinzufügen</h2>
+      <p class='muted'>Hier kannst du einen manuellen Wecker anlegen. Alle kommenden manuellen und WebComm-Wecker siehst du gesammelt im <a href='/'>Dashboard</a>.</p>
+      <form method='post' action='/alarms'>
+        <input type='hidden' name='csrf' value='{token}'>
+        <label>Name<input name='name' required placeholder='z. B. Frühschicht'></label>
+        <label>Uhrzeit<input type='time' name='alarm_time' required></label>
+        <label>Wochentage (0=Mo … 6=So)<input name='weekdays' value='0,1,2,3,4,5,6'></label>
+        <label>Einmaliges Datum (optional)<input type='date' name='one_time_date'></label>
+        <button>Wecker speichern</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Manuelle Wecker</h2>
+      <p class='muted'>Hier verwaltest und löschst du ausschließlich selbst angelegte Wecker. Automatisch erzeugte WebComm-Wecker bleiben im Dashboard.</p>
+      {rows}
+    </section>
+    """
+    return HTMLResponse(_layout("Meine Wecker", body, user))
 
 
 @app.post("/alarms")
@@ -303,36 +629,6 @@ def delete_alarm(alarm_id: int, request: Request, csrf: str = Form(...), user: U
         raise HTTPException(404, "Wecker nicht gefunden.")
     db.delete(alarm); db.commit()
     return RedirectResponse("/alarms", 303)
-
-
-@app.get("/integrations", response_class=HTMLResponse)
-def integrations_page(request: Request, user: User = Depends(current_user), db: Session = Depends(db_session)):
-    token = _csrf(request)
-    integration = db.scalar(select(WebCommIntegration).where(WebCommIntegration.user_id == user.id))
-    offsets = integration.offsets if integration else "120,90"
-    state = "aktiviert" if integration and integration.enabled else "nicht aktiviert"
-    tz = ZoneInfo(user.timezone or DEFAULT_TZ)
-    now_utc = datetime.now(timezone.utc)
-    shifts = db.scalars(select(WebCommShift).where(WebCommShift.user_id == user.id).order_by(WebCommShift.start)).all()
-    future_shifts = [shift for shift in shifts if shift.start > now_utc]
-    next_shift = future_shifts[0] if future_shifts else None
-    next_shift_text = "keine zukünftige Schicht importiert"
-    if next_shift:
-        local_start = next_shift.start.astimezone(tz)
-        next_shift_text = f"{local_start.strftime('%d.%m.%Y %H:%M')} · {next_shift.title}"
-    upcoming_webcomm = [item for item in _upcoming(user, db, 200) if item.get("source") == "webcomm"]
-    last_sync_text = "noch kein erfolgreicher Sync"
-    if integration and shifts:
-        last_sync_text = integration.updated_at.astimezone(tz).strftime("%d.%m.%Y %H:%M:%S")
-    status_box = (
-        "<div class='card'><h3>WebComm-Syncstatus</h3>"
-        f"<p><b>Letzter Sync:</b> {last_sync_text}</p>"
-        f"<p><b>Importierte Schichten:</b> {len(shifts)}</p>"
-        f"<p><b>Nächste Schicht:</b> {next_shift_text}</p>"
-        f"<p><b>Erzeugte kommende Wecker:</b> {len(upcoming_webcomm)}</p></div>"
-    )
-    body = f"<section><h2>WebComm (optional)</h2><p>WebComm ist nur eine zusätzliche automatische Alarmquelle. Deine manuellen Wecker funktionieren unabhängig davon.</p><p>Status: <b>{state}</b></p>{status_box}<form method='post' action='/integrations/webcomm'><input type='hidden' name='csrf' value='{token}'><label>Vorlaufzeiten in Minuten<input name='offsets' value='{offsets}' placeholder='120,90,45'></label><button>WebComm aktivieren / Token neu erzeugen</button></form><p class='muted'>Das neue Token wird nur einmal nach dem Erzeugen angezeigt.</p></section>"
-    return HTMLResponse(_layout("Integrationen", body, user))
 
 
 @app.post("/integrations/webcomm", response_class=HTMLResponse)

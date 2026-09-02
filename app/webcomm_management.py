@@ -89,19 +89,6 @@ async def _lifespan(app):
 main.app.router.lifespan_context = _lifespan
 
 
-_original_layout = main._layout
-
-
-def _layout(title: str, body: str, user: main.User | None = None) -> str:
-    page = _original_layout(title, body, user)
-    if user and "href='/webcomm-data'" not in page:
-        page = page.replace("<a href='/devices'>Geräte / API</a>", "<a href='/webcomm-data'>WebComm-Daten</a><a href='/devices'>Geräte / API</a>")
-    return page
-
-
-main._layout = _layout
-
-
 @main.app.get("/webcomm-data", response_class=HTMLResponse)
 def webcomm_data_page(request: Request, user: main.User = Depends(main.current_user), db: Session = Depends(main.db_session)):
     token = main._csrf(request)

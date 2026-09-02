@@ -94,7 +94,8 @@ def _location_rows(user: main.User, db: Session, shifts: list[main.WebCommShift]
     return "".join(rows)
 
 
-def integrations_page_fixed(
+@main.app.get("/integrations", response_class=HTMLResponse)
+def integrations_page(
     request: Request,
     user: main.User = Depends(main.current_user),
     db: Session = Depends(main.db_session),
@@ -344,19 +345,3 @@ def save_start_location_mapping(
     db.refresh(mapping)
 
     return RedirectResponse("/integrations?location_saved=1", 303)
-
-
-def _install_override() -> None:
-    for route in main.app.routes:
-        if getattr(route, "path", None) != "/integrations":
-            continue
-        methods = getattr(route, "methods", set()) or set()
-        if "GET" not in methods:
-            continue
-        route.endpoint = integrations_page_fixed
-        if getattr(route, "dependant", None) is not None:
-            route.dependant.call = integrations_page_fixed
-        break
-
-
-_install_override()

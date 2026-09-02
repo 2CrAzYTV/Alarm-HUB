@@ -388,26 +388,13 @@ async def import_direct(user: main.User, credential: DirectWebCommCredential, db
     return len(all_shifts)
 
 
-def _patch_navigation() -> None:
-    original = main._layout
-
-    def wrapped(title: str, body: str, user: main.User | None = None) -> str:
-        page = original(title, body, user)
-        if user and "href='/webcomm-direct'" not in page:
-            page = page.replace("<a href='/devices'>Geräte / API</a>", "<a href='/webcomm-direct'>WebComm direkt</a><a href='/devices'>Geräte / API</a>")
-        return page
-
-    main._layout = wrapped
-
-
-_patch_navigation()
-
-
 @main.app.get("/webcomm-direct", response_class=HTMLResponse)
 def direct_page(request: Request, user: main.User = Depends(main.current_user), db: Session = Depends(main.db_session)):
     token = main._csrf(request)
     cred = db.scalar(select(DirectWebCommCredential).where(DirectWebCommCredential.user_id == user.id))
-    url = html.escape(cred.url if cred else "https://webcomm.goevb.de/WebComm/default.aspx?TestingCookie=1", quote=True)
+    # A fresh/reset form starts blank rather than pre-filled with one vendor's
+    # default URL. Existing saved URLs continue to be displayed normally.
+    url = html.escape(cred.url if cred else "", quote=True)
     username = html.escape(cred.username if cred else "", quote=True)
     tz = ZoneInfo(user.timezone or main.DEFAULT_TZ)
     last_sync = cred.last_sync_at.astimezone(tz).strftime("%d.%m.%Y %H:%M:%S") if cred and cred.last_sync_at else "noch nie"

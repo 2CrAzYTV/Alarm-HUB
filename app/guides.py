@@ -12,20 +12,97 @@ from . import main
 ROUTINEHUB_PAGE = "https://routinehub.co/shortcut/21697/"
 ROUTINEHUB_DOWNLOAD = "https://routinehub.co/download/59565/?t=eyJ2Ijo1OTU2NX0:1wy3IN:uAgosFteGGum_57LQ3Io47B7f9unHbYNOx73Etz23pQ"
 
-_original_layout = main._layout
+GUIDE_DROPDOWN_CSS = r"""
+<style id="alarmhub-guide-dropdowns">
+.platform-guide {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: var(--radius) !important;
+  padding: 0 !important;
+  margin: 0 0 14px !important;
+  overflow: hidden;
+}
+.platform-guide > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+  cursor: pointer;
+  font-size: 1.04rem;
+  font-weight: 720;
+  color: var(--text);
+  user-select: none;
+}
+.platform-guide > summary::-webkit-details-marker { display: none; }
+.platform-guide > summary::after {
+  content: "⌄";
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 1.15rem;
+  transition: transform .16s ease;
+}
+.platform-guide[open] > summary::after { transform: rotate(180deg); }
+.platform-guide[open] > summary {
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-soft);
+}
+.platform-guide-content { padding: 18px 20px 22px; }
+.platform-guide-content > section {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.platform-guide-content > section > h2 { display: none; }
+.platform-guide-hint {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: .93rem;
+}
+@media (max-width: 720px) {
+  .platform-guide > summary { padding: 15px 16px; }
+  .platform-guide-content { padding: 15px 16px 18px; }
+}
+</style>
+"""
 
 
-def _layout_with_guides(title: str, body: str, user: main.User | None = None) -> str:
-    html = _original_layout(title, body, user)
-    if user and "href='/guides'" not in html:
-        html = html.replace(
-            "<a href='/devices'>Geräte / API</a>",
-            "<a href='/devices'>Geräte / API</a><a href='/guides'>Anleitungen</a>",
-        )
-    return html
+def _wrap_platform_guides(html: str) -> str:
+    """Collapse the iOS/Android walkthroughs into dropdowns so the page stays compact."""
+    ios_marker = "<section id='ios'>"
+    android_marker = "<section id='android'>"
+    troubleshooting_marker = "<section>\n  <h2>Fehlersuche</h2>"
 
+    if "alarmhub-guide-dropdowns" in html:
+        return html
+    if ios_marker not in html or android_marker not in html or troubleshooting_marker not in html:
+        return html
 
-main._layout = _layout_with_guides
+    before_ios, rest = html.split(ios_marker, 1)
+    ios_body, rest = rest.split(android_marker, 1)
+    android_body, after_android = rest.split(troubleshooting_marker, 1)
+
+    ios_section = ios_marker + ios_body
+    android_section = android_marker + android_body
+
+    chooser = (
+        "<section>"
+        "<h2>Smartphone-Anleitung auswählen</h2>"
+        "<p class='platform-guide-hint'>Wähle dein Betriebssystem. Die Anleitung öffnet sich erst beim Anklicken, damit die Seite kompakt bleibt.</p>"
+        "<details class='platform-guide'>"
+        "<summary>🍎 iOS / iPhone</summary>"
+        f"<div class='platform-guide-content'>{ios_section}</div>"
+        "</details>"
+        "<details class='platform-guide'>"
+        "<summary>🤖 Android / MacroDroid</summary>"
+        f"<div class='platform-guide-content'>{android_section}</div>"
+        "</details>"
+        "</section>"
+    )
+
+    html = before_ios + chooser + troubleshooting_marker + after_android
+    return html.replace("</head>", GUIDE_DROPDOWN_CSS + "</head>")
 
 
 def _endpoint(request: Request) -> str:
@@ -340,7 +417,7 @@ def guides_page(
   <p class='muted'>Die Smartphone-Automation verwendet immer den aktuell nächsten bekannten Wecker. Änderungen an manuellen Weckern oder WebComm-Schichten werden beim nächsten erfolgreichen Sync berücksichtigt.</p>
 </section>
 """
-    return HTMLResponse(main._layout("Anleitungen", body, user))
+    return HTMLResponse(_wrap_platform_guides(main._layout("Anleitungen", body, user)))
 
 
 @main.app.get("/api/v1/me/next")
