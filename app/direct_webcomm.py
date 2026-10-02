@@ -197,38 +197,97 @@ async def _guard_browser_requests(route) -> None:
     await route.continue_()
 
 
+async def _visible_in_frames(frames, selectors: list[str]):
+    for frame in frames:
+        found = await _visible([frame.locator(selector) for selector in selectors])
+        if found is not None:
+            return found
+    return None
+
+
 async def _verify_webcomm_start_page(page) -> tuple[object, object, object]:
-    await page.wait_for_timeout(250)
+    """Detect the WebComm login form across different operator installations.
+
+    Some installations render labels differently, put "Anmelden" only into the
+    submit button's value (invisible to inner_text) or place the form in a frame.
+    WebComm is therefore identified by the /WebComm/ URL path or the WebComm
+    name plus the actual presence of username, password and submit controls.
+    """
+    await page.wait_for_timeout(500)
     final = urlparse(page.url)
     if final.scheme != "https" or not final.hostname:
         raise RuntimeError("Die WebComm-Startseite hat auf eine ungültige oder unverschlüsselte Adresse weitergeleitet.")
     _assert_public_host(final.hostname)
 
-    body_text = (await page.locator("body").inner_text(timeout=10000)).casefold()
-    title = (await page.title()).casefold()
-    username_marker = "benutzerkennung" in body_text or "benutzername" in body_text
-    password_marker = "kennwort" in body_text or "passwort" in body_text
-    login_marker = "anmelden" in body_text or "login" in body_text
-    webcomm_marker = "webcomm" in body_text or "webcomm" in title
+    frames = list(page.frames)
+    texts: list[str] = []
+    for frame in frames:
+        try:
+            texts.append((await frame.locator("body").inner_text(timeout=5000)).casefold())
+        except Exception:
+            pass
+    try:
+        title = (await page.title()).casefold()
+    except Exception:
+        title = ""
+    path_marker = "/webcomm/" in (final.path or "").casefold()
+    text_marker = "webcomm" in "\n".join(texts) or "webcomm" in title
 
-    user_input = await _visible([
-        page.locator('input[name*="user" i]'),
-        page.locator('input[id*="user" i]'),
-        page.locator('input[type="text"]'),
+    user_input = await _visible_in_frames(frames, [
+        'input[name*="user" i]', 'input[id*="user" i]',
+        'input[name*="login" i]', 'input[id*="login" i]',
+        'input[name*="kennung" i]', 'input[id*="kennung" i]',
+        'input[autocomplete="username"]', 'input[type="text"]', 'input[type="email"]',
     ])
-    pass_input = await _visible([page.locator('input[type="password"]')])
-    login = await _visible([
-        page.get_by_role("button", name="Anmelden"),
-        page.get_by_role("button", name="Login"),
-        page.locator('input[type="submit"]'),
-        page.locator('button[type="submit"]'),
-    ])
+    pass_input = await _visible_in_frames(frames, ['input[type="password"]', 'input[autocomplete="current-password"]'])
+    # Prefer a button whose label/value actually looks like a login action.
+    login = None
+    for frame in frames:
+        login = await _visible([
+            frame.get_by_role("button", name="Anmelden"),
+            frame.get_by_role("button", name="Login"),
+            frame.locator('input[type="submit"][value*="Anmeld" i]'),
+            frame.locator('input[type="submit"][value*="Login" i]'),
+            frame.locator('input[type="button"][value*="Anmeld" i]'),
+            frame.locator('input[type="button"][value*="Login" i]'),
+        ])
+        if login is not None:
+            break
+    if login is None:
+        login = await _visible_in_frames(frames, ['input[type="submit"]', 'button[type="submit"]', "button", 'input[type="button"]'])
 
-    if not (webcomm_marker and username_marker and password_marker and login_marker and user_input and pass_input and login):
-        raise RuntimeError(
-            "Die angegebene Startseite wurde nicht als WebComm-Anmeldung erkannt. Erwartet werden WebComm sowie Benutzerkennung/Benutzername, Kennwort/Passwort und Anmelden/Login."
-        )
+    if user_input is None or pass_input is None or login is None:
+        raise RuntimeError("Die WebComm-Anmeldemaske wurde nicht gefunden. Erwartet werden ein Benutzerfeld, ein Passwortfeld und ein Anmeldebutton.")
+    if not (path_marker or text_marker):
+        raise RuntimeError("Die Seite enthält eine Anmeldemaske, wurde aber nicht als WebComm erkannt. Die URL sollte normalerweise /WebComm/ enthalten.")
     return user_input, pass_input, login
+
+
+LOGIN_FAILED_MARKERS = ("anmeldung war nicht erfolgreich", "anmeldung fehlgeschlagen", "kennwort ist falsch", "ungültige anmeld")
+
+
+async def _assert_logged_in(page) -> None:
+    """Wait for the post-login page and fail clearly if WebComm rejected the login.
+
+    Without this check a rejected login only surfaced later as the misleading
+    "WebComm-Element 'duty_plan' wurde nicht gefunden".
+    """
+    try:
+        await page.wait_for_load_state("load", timeout=15000)
+    except Exception:
+        pass
+    for _ in range(20):
+        if await _visible(_choices(page, "duty_plan")):
+            return
+        try:
+            body_text = (await page.locator("body").inner_text(timeout=5000)).casefold()
+        except Exception:
+            body_text = ""
+        if any(marker in body_text for marker in LOGIN_FAILED_MARKERS):
+            raise RuntimeError("WebComm-Anmeldung fehlgeschlagen: Benutzerkennung oder Kennwort ist falsch.")
+        await page.wait_for_timeout(500)
+    if await _visible([page.locator('input[type="password"]')]):
+        raise RuntimeError("WebComm-Anmeldung fehlgeschlagen: Nach dem Login wird weiterhin die Anmeldemaske angezeigt. Bitte Benutzerkennung und Kennwort prüfen.")
 
 
 async def _check_start_page(url: str) -> None:
@@ -246,8 +305,8 @@ async def _check_start_page(url: str) -> None:
             await browser.close()
 
 
-async def _click(page, purpose: str):
-    choices = {
+def _choices(page, purpose: str) -> list:
+    return {
         "duty_plan": [
             page.locator("#ctl00_ctl00_lnk_1"),
             page.get_by_role("link", name="Dienstplan"),
@@ -268,7 +327,10 @@ async def _click(page, purpose: str):
             page.locator('a[href^="rosprint.aspx?"]'), page.locator('[title*="Druck" i]'),
         ],
     }[purpose]
-    found = await _visible(choices)
+
+
+async def _click(page, purpose: str):
+    found = await _visible(_choices(page, purpose))
     if not found:
         raise RuntimeError(f"WebComm-Element '{purpose}' wurde nicht gefunden.")
     await found.click(timeout=15000)
@@ -288,7 +350,7 @@ async def _fetch_pdf(url: str, username: str, password: str, output: Path, month
             await user_input.fill(username)
             await pass_input.fill(password)
             await login.click()
-            await page.wait_for_load_state("domcontentloaded")
+            await _assert_logged_in(page)
             await _click(page, "duty_plan")
             await page.wait_for_timeout(1000)
 
