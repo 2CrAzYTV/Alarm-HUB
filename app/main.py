@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from passlib.context import CryptContext
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, create_engine, select
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, create_engine, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -25,6 +25,8 @@ DEFAULT_TZ = os.getenv("DEFAULT_TIMEZONE", "Europe/Berlin")
 # open = anyone may register, invite = REGISTRATION_INVITE_CODE required, closed = no new accounts
 REGISTRATION_MODE = os.getenv("REGISTRATION_MODE", "open").strip().lower()
 REGISTRATION_INVITE_CODE = os.getenv("REGISTRATION_INVITE_CODE", "").strip()
+# Comma-separated e-mail addresses that may open /admin
+ADMIN_EMAILS = {x.strip().lower() for x in os.getenv("ADMIN_EMAILS", "").split(",") if x.strip()}
 LOGIN_MAX_FAILURES = int(os.getenv("LOGIN_MAX_FAILURES", "5"))
 LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))
 
@@ -44,6 +46,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(512))
     timezone: Mapped[str] = mapped_column(String(64), default=DEFAULT_TZ)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     alarms: Mapped[list["Alarm"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
@@ -93,9 +97,54 @@ class WebCommShift(Base):
     end_location: Mapped[str | None] = mapped_column(String(160), nullable=True)
 
 
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(500), default="")
+
+
+# Runtime overrides from the admin page; fall back to the environment when unset
+_settings: dict[str, str] = {}
+
+
+def load_settings(db: Session) -> None:
+    _settings.clear()
+    _settings.update({row.key: row.value for row in db.scalars(select(AppSetting)).all()})
+
+
+def save_setting(db: Session, key: str, value: str) -> None:
+    row = db.get(AppSetting, key)
+    if row:
+        row.value = value
+    else:
+        db.add(AppSetting(key=key, value=value))
+    db.commit()
+    _settings[key] = value
+
+
+def registration_mode() -> str:
+    return _settings.get("registration_mode") or REGISTRATION_MODE
+
+
+def registration_invite_code() -> str:
+    return _settings.get("registration_invite_code") or REGISTRATION_INVITE_CODE
+
+
+def _add_missing_columns() -> None:
+    # create_all never alters existing tables, so columns added later are added here
+    existing = {c["name"] for c in inspect(engine).get_columns("users")}
+    with engine.begin() as conn:
+        for name in ("last_login_at", "disabled_at"):
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} TIMESTAMP WITH TIME ZONE NULL"))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
+    _add_missing_columns()
+    with SessionLocal() as db:
+        load_settings(db)
     yield
 
 
@@ -153,6 +202,17 @@ class _FailureLimiter:
             for k in keys:
                 self._hits[k].append(now)
 
+    def active(self) -> dict[str, tuple[int, float]]:
+        """Keys with recent failures: count and seconds until the oldest one expires."""
+        now = _time.monotonic()
+        with self._lock:
+            out = {}
+            for k in list(self._hits):
+                hits = self._prune(k, now)
+                if hits:
+                    out[k] = (len(hits), self.window - (now - hits[0]))
+            return out
+
     def reset(self, *keys: str) -> None:
         with self._lock:
             for k in keys:
@@ -174,11 +234,16 @@ def _too_many_attempts() -> HTTPException:
 
 
 def _registration_open() -> bool:
-    if REGISTRATION_MODE == "closed":
+    mode = registration_mode()
+    if mode == "closed":
         return False
-    if REGISTRATION_MODE == "invite":
-        return bool(REGISTRATION_INVITE_CODE)
+    if mode == "invite":
+        return bool(registration_invite_code())
     return True
+
+
+def is_admin(user: User | None) -> bool:
+    return bool(user and user.email.lower() in ADMIN_EMAILS)
 
 
 def current_user(request: Request, db: Session = Depends(db_session)) -> User:
@@ -189,6 +254,9 @@ def current_user(request: Request, db: Session = Depends(db_session)) -> User:
     if not user:
         request.session.clear()
         raise HTTPException(401, "Bitte anmelden.")
+    if user.disabled_at:
+        request.session.clear()
+        raise HTTPException(403, "Dieses Konto ist gesperrt.")
     return user
 
 
@@ -482,7 +550,8 @@ def _layout(title: str, body: str, user: User | None = None) -> str:
             "<a href='/webcomm-data'>WebComm-Daten</a>"
             "<a href='/devices'>Geräte / API</a>"
             "<a href='/guides'>Anleitungen</a>"
-            "<a href='/logout'>Abmelden</a>"
+            + ("<a href='/admin'>Administration</a>" if is_admin(user) else "")
+            + "<a href='/logout'>Abmelden</a>"
         )
     else:
         nav += "<a href='/login'>Anmelden</a>" + ("<a href='/register'>Registrieren</a>" if _registration_open() else "")
@@ -561,6 +630,8 @@ def _token_user(authorization: str | None, db: Session, model) -> User:
     user = db.get(User, token.user_id)
     if not user:
         raise HTTPException(401, "Benutzer nicht gefunden.")
+    if user.disabled_at:
+        raise HTTPException(403, "Dieses Konto ist gesperrt.")
     if isinstance(token, DeviceToken):
         token.last_used_at = datetime.now(timezone.utc)
         db.commit()
@@ -575,6 +646,9 @@ def health():
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, db: Session = Depends(db_session)):
     user = db.get(User, int(request.session["user_id"])) if request.session.get("user_id") else None
+    if user and user.disabled_at:
+        request.session.clear()
+        user = None
     if not user:
         return HTMLResponse(_layout("Alarm Hub", "<section><h2>Deine Wecker. Deine Integrationen.</h2><p>Erstelle beliebig viele eigene Wecker. WebComm ist optional und kann als zusätzliche automatische Alarmquelle verbunden werden.</p><div class='row'>" + ("<a href='/register'>Konto erstellen</a>" if _registration_open() else "") + "<a href='/login'>Anmelden</a></div></section>"))
     upcoming = _upcoming(user, db, 10)
@@ -587,7 +661,7 @@ def register_form(request: Request):
     if not _registration_open():
         return HTMLResponse(_layout("Registrieren", "<section><p>Die Registrierung ist derzeit geschlossen.</p><a href='/login'>Anmelden</a></section>"), status_code=403)
     token = _csrf(request)
-    invite = "<label>Einladungscode<input name='invite_code' autocomplete='off' required></label>" if REGISTRATION_MODE == "invite" else ""
+    invite = "<label>Einladungscode<input name='invite_code' autocomplete='off' required></label>" if registration_mode() == "invite" else ""
     return HTMLResponse(_layout("Registrieren", f"<section><form method='post'><input type='hidden' name='csrf' value='{token}'><label>E-Mail<input type='email' name='email' required></label><label>Passwort<input type='password' name='password' minlength='10' required></label>{invite}<label>Zeitzone<input name='timezone_name' value='{DEFAULT_TZ}' required></label><button>Registrieren</button></form></section>"))
 
 
@@ -596,11 +670,11 @@ def register(request: Request, email: str = Form(...), password: str = Form(...)
     _check_csrf(request, csrf)
     if not _registration_open():
         raise HTTPException(403, "Die Registrierung ist derzeit geschlossen.")
-    if REGISTRATION_MODE == "invite":
+    if registration_mode() == "invite":
         ip_key = "reg-ip:" + _client_ip(request)
         if _ip_limiter.blocked(ip_key):
             raise _too_many_attempts()
-        if not hmac.compare_digest(invite_code.strip().encode(), REGISTRATION_INVITE_CODE.encode()):
+        if not hmac.compare_digest(invite_code.strip().encode(), registration_invite_code().encode()):
             _ip_limiter.fail(ip_key)
             raise HTTPException(403, "Einladungscode ist ungültig.")
     email = email.strip().lower()
@@ -637,6 +711,10 @@ def login(request: Request, email: str = Form(...), password: str = Form(...), c
         _account_limiter.fail(account_key)
         raise HTTPException(401, "Anmeldung fehlgeschlagen.")
     _ip_limiter.reset(ip_key)
+    if user.disabled_at:
+        raise HTTPException(403, "Dieses Konto ist gesperrt.")
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
     request.session.clear(); request.session["user_id"] = user.id
     return RedirectResponse("/", 303)
 
