@@ -845,12 +845,20 @@ def delete_device_token(device_id: int, request: Request, csrf: str = Form(...),
 
 
 @app.get("/api/v1/me/upcoming")
-def upcoming_api(request: Request, authorization: str | None = Header(default=None), db: Session = Depends(db_session)):
+def upcoming_api(request: Request, hours: int | None = None, authorization: str | None = Header(default=None), db: Session = Depends(db_session)):
     if authorization:
         user = _token_user(authorization, db, DeviceToken)
     else:
         user = current_user(request, db)
-    return {"ok": True, "timezone": user.timezone, "alarms": _upcoming(user, db, 50)}
+    alarms = _upcoming(user, db, 50)
+    if hours is not None:
+        # Phone alarms ring at the next occurrence of their time of day, so
+        # shortcuts ask only for alarms within the next 24 hours.
+        if not 1 <= hours <= 168:
+            raise HTTPException(400, "hours muss zwischen 1 und 168 liegen.")
+        limit = datetime.now(timezone.utc) + timedelta(hours=hours)
+        alarms = [a for a in alarms if datetime.fromisoformat(a["at"]) <= limit]
+    return {"ok": True, "timezone": user.timezone, "alarms": alarms}
 
 
 @app.post("/api/v1/integrations/webcomm/shifts")
