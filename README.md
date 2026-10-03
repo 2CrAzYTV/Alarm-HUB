@@ -71,6 +71,18 @@ SESSION_HTTPS_ONLY=false
 
 For public deployment, place Alarm Hub behind a reverse proxy with a valid public HTTPS certificate and set `SESSION_HTTPS_ONLY=true`.
 
+### Public instances: registration, login lockout and admin page
+
+```text
+REGISTRATION_MODE=invite          # open (default), invite or closed
+REGISTRATION_INVITE_CODE=<secret> # required for invite
+ADMIN_EMAILS=you@example.com      # comma-separated, empty disables /admin
+LOGIN_MAX_FAILURES=5              # per IP, twice this value per account
+LOGIN_LOCKOUT_SECONDS=900
+```
+
+With the default `REGISTRATION_MODE=open` anyone who can reach the instance can create an account, so use `invite` or `closed` for a publicly reachable deployment. Accounts listed in `ADMIN_EMAILS` get an **Administration** page at `/admin` to view, edit, lock, unlock and delete accounts, set passwords, revoke tokens, clear login lockouts and change the registration mode and invite code at runtime (stored in the database, takes precedence over the environment variables). The lockout counter lives in memory and is reset by a container restart.
+
 ## WebComm integration
 A logged-in user can create an integration token on the Integrations page. WebComm Calendar Sync can then POST future shifts to `/api/v1/integrations/webcomm/shifts` with `Authorization: Bearer <token>`.
 
