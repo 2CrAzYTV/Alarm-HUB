@@ -117,6 +117,7 @@ def guides_page(
 ):
     endpoint = escape(_endpoint(request))
     upcoming_endpoint = escape(_endpoint(request, "upcoming"))
+    upcoming_24h_endpoint = escape(_endpoint(request, "upcoming?hours=24"))
     body = f"""
 <section>
   <h2>Smartphone-Wecker – ausführliche Anleitung für Anfänger</h2>
@@ -136,8 +137,9 @@ def guides_page(
 
   <div class='card'>
     <h3>Alarm-HUB API</h3>
-    <p><b>Nächster Wecker</b> (für selbst gebaute Kurzbefehle und MacroDroid):<br><code>{endpoint}</code></p>
+    <p><b>Nächster Wecker</b> (für MacroDroid):<br><code>{endpoint}</code></p>
     <p><b>Alle kommenden Wecker</b> (für den fertigen iPhone-Kurzbefehl):<br><code>{upcoming_endpoint}</code></p>
+    <p><b>Alle Wecker der nächsten 24 Stunden</b> (für den selbst gebauten iPhone-Kurzbefehl):<br><code>{upcoming_24h_endpoint}</code></p>
     <p>Für die Abfrage wird zusätzlich folgender HTTP-Header benötigt:</p>
     <p><code>Authorization: Bearer DEIN_TOKEN</code></p>
     <p class='muted'>Zwischen <code>Bearer</code> und dem Token steht genau ein Leerzeichen.</p>
@@ -162,7 +164,7 @@ def guides_page(
 }}</code></pre>
     <p>Für den Smartphone-Wecker sind <code>within_24h</code>, <code>alarm.time</code> und <code>alarm.name</code> wichtig. Bei manuellen Weckern fehlen <code>shift_start</code> und <code>service_number</code>.</p>
     <p><b>Wichtig:</b> Ein Handy-Wecker kennt nur eine Uhrzeit und klingelt beim nächsten Erreichen dieser Uhrzeit. Lege den Wecker deshalb nur an, wenn <code>within_24h</code> den Wert <code>true</code> hat. Sonst würde ein Wecker, der erst übermorgen fällig ist, schon morgen klingeln.</p>
-    <p class='muted'>Diese Abfrage liefert immer nur den <b>einen</b> nächsten Wecker. Hast du bei WebComm mehrere Vorlaufzeiten (z. B. 120, 90 und 45 Minuten), kommt pro Abruf nur der früheste davon aufs Handy. Für mehrere Wecker pro Schicht nutze auf dem iPhone den fertigen Kurzbefehl oder lass deine Automation nach jedem Wecker erneut laufen.</p>
+    <p class='muted'>Diese Abfrage liefert immer nur den <b>einen</b> nächsten Wecker. Hast du bei WebComm mehrere Vorlaufzeiten (z. B. 120, 90 und 45 Minuten), kommt pro Abruf nur der früheste davon aufs Handy. Auf dem iPhone legen der fertige und der selbst gebaute Kurzbefehl alle Wecker an, weil sie die Liste abrufen. Bei MacroDroid lass das Makro nach jedem Wecker erneut laufen.</p>
   </div>
 
   <p><b>Netzwerk-Hinweis:</b> Wenn Alarm-HUB nur im Heimnetz erreichbar ist, funktioniert die Synchronisation unterwegs nur über VPN. Für direkten Internetzugriff sollte Alarm-HUB ausschließlich über HTTPS hinter einem korrekt konfigurierten Reverse Proxy bereitgestellt werden.</p>
@@ -230,7 +232,7 @@ def guides_page(
       <h3>Teil 2 – Alarm-HUB abfragen</h3>
       <ol>
         <li>Füge die Aktion <b>URL</b> hinzu.</li>
-        <li>Trage <code>{endpoint}</code> ein.</li>
+        <li>Trage <code>{upcoming_24h_endpoint}</code> ein. Der Zusatz <code>?hours=24</code> sorgt dafür, dass nur Wecker der nächsten 24 Stunden geliefert werden.</li>
         <li>Füge darunter <b>Inhalte von URL abrufen</b> hinzu.</li>
         <li>Stelle die Methode auf <b>GET</b>.</li>
         <li>Füge den Header <code>Authorization</code> hinzu.</li>
@@ -249,25 +251,34 @@ def guides_page(
     </div>
 
     <div class='card'>
-      <h3>Teil 4 – Weckerdaten auslesen</h3>
+      <h3>Teil 4 – Weckerliste durchgehen</h3>
       <ol>
-        <li>Füge nach <b>Inhalte von URL abrufen</b> die Aktion <b>Wörterbuchwert abrufen</b> hinzu und lies den Schlüssel <code>within_24h</code>.</li>
-        <li>Füge <b>Wenn</b> hinzu: Nur wenn der Wert <b>wahr</b> ist, geht es weiter. Andernfalls beendet der Kurzbefehl sich ohne Wecker (der nächste Wecker ist dann noch über 24 Stunden entfernt oder es gibt keinen).</li>
-        <li>Lies innerhalb von <b>Wenn</b> aus der Antwort den Schlüssel <code>alarm</code>.</li>
-        <li>Aus diesem Wörterbuch liest du anschließend den Schlüssel <code>time</code>.</li>
-        <li>Der Wert hat das Format <code>HH:MM</code>, z. B. <code>04:34</code>.</li>
-        <li>Lies zusätzlich aus <code>alarm</code> den Schlüssel <code>name</code> aus.</li>
+        <li>Füge nach <b>Inhalte von URL abrufen</b> die Aktion <b>Wörterbuchwert abrufen</b> hinzu und lies den Schlüssel <code>alarms</code>. Das ist die Liste aller Wecker der nächsten 24 Stunden.</li>
+        <li>Füge <b>Wiederholen mit jedem Objekt</b> hinzu. Als Eingabe nimmt die Aktion automatisch den Wörterbuchwert. Darunter erscheinen <b>Ende Wiederholen</b> und die Variable <b>Wiederholungsobjekt</b> (der jeweils aktuelle Wecker).</li>
+        <li>Füge <b>zwischen</b> „Wiederholen mit jedem Objekt“ und „Ende Wiederholen“ die Aktion <b>Wörterbuchwert abrufen</b> hinzu. Tippe auf das Eingabefeld, wähle <b>Wiederholungsobjekt</b> und als Schlüssel <code>time</code>. Der Wert hat das Format <code>HH:MM</code>, z. B. <code>04:34</code>.</li>
+        <li>Füge darunter noch einmal <b>Wörterbuchwert abrufen</b> hinzu, wieder mit <b>Wiederholungsobjekt</b>, diesmal mit dem Schlüssel <code>name</code>.</li>
+        <li>Neue Aktionen landen oft ganz unten. Halte eine Aktion dann am Titel gedrückt und ziehe sie zwischen „Wiederholen mit jedem Objekt“ und „Ende Wiederholen“.</li>
       </ol>
     </div>
 
     <div class='card'>
       <h3>Teil 5 – Wecker erstellen</h3>
       <ol>
-        <li>Füge (noch innerhalb von <b>Wenn</b>) die Aktion <b>Wecker erstellen</b> aus der App <b>Uhr</b> hinzu.</li>
+        <li>Füge (noch innerhalb von <b>Wiederholen</b>) die Aktion <b>Wecker erstellen</b> aus der App <b>Uhr</b> hinzu.</li>
         <li>Setze als Uhrzeit den Wert aus <code>time</code>. Verlangt deine iOS-Version Stunde und Minute getrennt, teile <code>time</code> vorher mit <b>Text teilen</b> am Doppelpunkt <code>:</code> (Element 1 = Stunde, Element 2 = Minute).</li>
         <li>Als Bezeichnung kannst du <b>Alarm-HUB –</b> gefolgt von <code>name</code> verwenden.</li>
-        <li>Führe den Kurzbefehl erneut aus und kontrolliere den Wecker in der Apple-Uhr-App.</li>
+        <li>Führe den Kurzbefehl erneut aus und kontrolliere die Wecker in der Apple-Uhr-App. Für jeden Wecker der nächsten 24 Stunden sollte einer angelegt sein, bei mehreren WebComm-Vorlaufzeiten also mehrere pro Schicht.</li>
       </ol>
+      <p>So sieht der fertige Kurzbefehl aus:</p>
+      <pre><code>URL
+Inhalte von URL abrufen
+Wert für "alarms" in Inhalte von URL abrufen
+Wiederholen mit jedem Objekt in Wörterbuchwert
+    Wert für "time" in Wiederholungsobjekt abrufen
+    Wert für "name" in Wiederholungsobjekt abrufen
+    Wecker erstellen
+Ende Wiederholen</code></pre>
+      <p class='muted'>Gibt es in den nächsten 24 Stunden keinen Wecker, ist die Liste leer und der Kurzbefehl legt nichts an.</p>
     </div>
   </details>
 
@@ -422,7 +433,7 @@ def guides_page(
   </div>
   <div class='card'>
     <h3>Der Wecker klingelt am falschen Tag</h3>
-    <p>Ein selbst gebauter Kurzbefehl oder ein MacroDroid-Makro hat den Wecker angelegt, ohne <code>within_24h</code> zu prüfen. Ergänze die Prüfung wie oben beschrieben und lösche den falschen Wecker in der Uhr-App.</p>
+    <p>Ein selbst gebauter Kurzbefehl hat die Liste ohne <code>?hours=24</code> abgerufen oder ein MacroDroid-Makro hat <code>within_24h</code> nicht geprüft. Ergänze das wie oben beschrieben und lösche den falschen Wecker in der Uhr-App.</p>
   </div>
   <div class='card'>
     <h3>Die API funktioniert, aber kein Wecker wird erstellt</h3>
