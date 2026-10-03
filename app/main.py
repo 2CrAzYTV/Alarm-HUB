@@ -4,6 +4,9 @@ import hashlib
 import hmac
 import os
 import secrets
+import threading
+import time as _time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -19,6 +22,11 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://alarmhub:alarmhub
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-before-public-deployment")
 SESSION_HTTPS_ONLY = os.getenv("SESSION_HTTPS_ONLY", "true").lower() in {"1", "true", "yes", "on"}
 DEFAULT_TZ = os.getenv("DEFAULT_TIMEZONE", "Europe/Berlin")
+# open = anyone may register, invite = REGISTRATION_INVITE_CODE required, closed = no new accounts
+REGISTRATION_MODE = os.getenv("REGISTRATION_MODE", "open").strip().lower()
+REGISTRATION_INVITE_CODE = os.getenv("REGISTRATION_INVITE_CODE", "").strip()
+LOGIN_MAX_FAILURES = int(os.getenv("LOGIN_MAX_FAILURES", "5"))
+LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))
 
 pwd = CryptContext(schemes=["argon2"], deprecated="auto")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
@@ -115,6 +123,62 @@ def _check_csrf(request: Request, token: str) -> None:
     expected = request.session.get("csrf") or ""
     if not expected or not hmac.compare_digest(expected, token or ""):
         raise HTTPException(403, "Ungültiges Formular-Token.")
+
+
+class _FailureLimiter:
+    """In-memory sliding window of failed attempts per key (client IP, account)."""
+
+    def __init__(self, max_failures: int, window_seconds: int):
+        self.max_failures = max_failures
+        self.window = window_seconds
+        self._hits: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    def _prune(self, key: str, now: float) -> deque[float]:
+        hits = self._hits[key]
+        while hits and now - hits[0] > self.window:
+            hits.popleft()
+        if not hits:
+            self._hits.pop(key, None)
+        return hits
+
+    def blocked(self, *keys: str) -> bool:
+        now = _time.monotonic()
+        with self._lock:
+            return any(len(self._prune(k, now)) >= self.max_failures for k in keys)
+
+    def fail(self, *keys: str) -> None:
+        now = _time.monotonic()
+        with self._lock:
+            for k in keys:
+                self._hits[k].append(now)
+
+    def reset(self, *keys: str) -> None:
+        with self._lock:
+            for k in keys:
+                self._hits.pop(k, None)
+
+
+# Per IP the normal limit; per account twice as much so one attacker IP cannot lock out the owner alone
+_ip_limiter = _FailureLimiter(LOGIN_MAX_FAILURES, LOGIN_LOCKOUT_SECONDS)
+_account_limiter = _FailureLimiter(LOGIN_MAX_FAILURES * 2, LOGIN_LOCKOUT_SECONDS)
+
+
+def _client_ip(request: Request) -> str:
+    # Cloudflare Tunnel passes the real visitor IP here; otherwise uvicorn --proxy-headers already resolved it
+    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "unknown")
+
+
+def _too_many_attempts() -> HTTPException:
+    return HTTPException(429, f"Zu viele Fehlversuche. Bitte in {max(1, LOGIN_LOCKOUT_SECONDS // 60)} Minuten erneut versuchen.")
+
+
+def _registration_open() -> bool:
+    if REGISTRATION_MODE == "closed":
+        return False
+    if REGISTRATION_MODE == "invite":
+        return bool(REGISTRATION_INVITE_CODE)
+    return True
 
 
 def current_user(request: Request, db: Session = Depends(db_session)) -> User:
@@ -421,7 +485,7 @@ def _layout(title: str, body: str, user: User | None = None) -> str:
             "<a href='/logout'>Abmelden</a>"
         )
     else:
-        nav += "<a href='/login'>Anmelden</a><a href='/register'>Registrieren</a>"
+        nav += "<a href='/login'>Anmelden</a>" + ("<a href='/register'>Registrieren</a>" if _registration_open() else "")
     head = (
         "<style>\n"
         ":root{color-scheme:dark}body{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;margin:0}"
@@ -512,7 +576,7 @@ def health():
 def home(request: Request, db: Session = Depends(db_session)):
     user = db.get(User, int(request.session["user_id"])) if request.session.get("user_id") else None
     if not user:
-        return HTMLResponse(_layout("Alarm Hub", "<section><h2>Deine Wecker. Deine Integrationen.</h2><p>Erstelle beliebig viele eigene Wecker. WebComm ist optional und kann als zusätzliche automatische Alarmquelle verbunden werden.</p><div class='row'><a href='/register'>Konto erstellen</a><a href='/login'>Anmelden</a></div></section>"))
+        return HTMLResponse(_layout("Alarm Hub", "<section><h2>Deine Wecker. Deine Integrationen.</h2><p>Erstelle beliebig viele eigene Wecker. WebComm ist optional und kann als zusätzliche automatische Alarmquelle verbunden werden.</p><div class='row'>" + ("<a href='/register'>Konto erstellen</a>" if _registration_open() else "") + "<a href='/login'>Anmelden</a></div></section>"))
     upcoming = _upcoming(user, db, 10)
     rows = "".join(f"<div class='alarm'><div><b>{x['date']} · {x['time']}</b> · {x['name']}<br><span class='muted'>{x['source']}</span></div></div>" for x in upcoming) or "<p class='muted'>Keine kommenden Wecker.</p>"
     return HTMLResponse(_layout("Dashboard", f"<section><h2>Nächste Wecker</h2>{rows}</section>", user))
@@ -520,13 +584,25 @@ def home(request: Request, db: Session = Depends(db_session)):
 
 @app.get("/register", response_class=HTMLResponse)
 def register_form(request: Request):
+    if not _registration_open():
+        return HTMLResponse(_layout("Registrieren", "<section><p>Die Registrierung ist derzeit geschlossen.</p><a href='/login'>Anmelden</a></section>"), status_code=403)
     token = _csrf(request)
-    return HTMLResponse(_layout("Registrieren", f"<section><form method='post'><input type='hidden' name='csrf' value='{token}'><label>E-Mail<input type='email' name='email' required></label><label>Passwort<input type='password' name='password' minlength='10' required></label><label>Zeitzone<input name='timezone_name' value='{DEFAULT_TZ}' required></label><button>Registrieren</button></form></section>"))
+    invite = "<label>Einladungscode<input name='invite_code' autocomplete='off' required></label>" if REGISTRATION_MODE == "invite" else ""
+    return HTMLResponse(_layout("Registrieren", f"<section><form method='post'><input type='hidden' name='csrf' value='{token}'><label>E-Mail<input type='email' name='email' required></label><label>Passwort<input type='password' name='password' minlength='10' required></label>{invite}<label>Zeitzone<input name='timezone_name' value='{DEFAULT_TZ}' required></label><button>Registrieren</button></form></section>"))
 
 
 @app.post("/register")
-def register(request: Request, email: str = Form(...), password: str = Form(...), timezone_name: str = Form(DEFAULT_TZ), csrf: str = Form(...), db: Session = Depends(db_session)):
+def register(request: Request, email: str = Form(...), password: str = Form(...), timezone_name: str = Form(DEFAULT_TZ), invite_code: str = Form(""), csrf: str = Form(...), db: Session = Depends(db_session)):
     _check_csrf(request, csrf)
+    if not _registration_open():
+        raise HTTPException(403, "Die Registrierung ist derzeit geschlossen.")
+    if REGISTRATION_MODE == "invite":
+        ip_key = "reg-ip:" + _client_ip(request)
+        if _ip_limiter.blocked(ip_key):
+            raise _too_many_attempts()
+        if not hmac.compare_digest(invite_code.strip().encode(), REGISTRATION_INVITE_CODE.encode()):
+            _ip_limiter.fail(ip_key)
+            raise HTTPException(403, "Einladungscode ist ungültig.")
     email = email.strip().lower()
     if len(password) < 10:
         raise HTTPException(400, "Passwort muss mindestens 10 Zeichen lang sein.")
@@ -551,9 +627,16 @@ def login_form(request: Request):
 @app.post("/login")
 def login(request: Request, email: str = Form(...), password: str = Form(...), csrf: str = Form(...), db: Session = Depends(db_session)):
     _check_csrf(request, csrf)
-    user = db.scalar(select(User).where(User.email == email.strip().lower()))
+    email = email.strip().lower()
+    ip_key, account_key = "login-ip:" + _client_ip(request), "login-account:" + email
+    if _ip_limiter.blocked(ip_key) or _account_limiter.blocked(account_key):
+        raise _too_many_attempts()
+    user = db.scalar(select(User).where(User.email == email))
     if not user or not pwd.verify(password, user.password_hash):
+        _ip_limiter.fail(ip_key)
+        _account_limiter.fail(account_key)
         raise HTTPException(401, "Anmeldung fehlgeschlagen.")
+    _ip_limiter.reset(ip_key)
     request.session.clear(); request.session["user_id"] = user.id
     return RedirectResponse("/", 303)
 
