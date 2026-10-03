@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 from html import escape
 
@@ -12,6 +13,8 @@ from . import main
 
 ROUTINEHUB_PAGE = "https://routinehub.co/shortcut/21697/"
 ROUTINEHUB_DOWNLOAD = "https://routinehub.co/download/59565/?t=eyJ2Ijo1OTU2NX0:1wy3IN:uAgosFteGGum_57LQ3Io47B7f9unHbYNOx73Etz23pQ"
+# Address shown in the guides; falls back to the URL the page was opened with.
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
 
 GUIDE_DROPDOWN_CSS = r"""
 <style id="alarmhub-guide-dropdowns">
@@ -107,7 +110,8 @@ def _wrap_platform_guides(html: str) -> str:
 
 
 def _endpoint(request: Request, path: str = "next") -> str:
-    return f"{str(request.base_url).rstrip('/')}/api/v1/me/{path}"
+    base = PUBLIC_BASE_URL or str(request.base_url).rstrip("/")
+    return f"{base}/api/v1/me/{path}"
 
 
 @main.app.get("/guides", response_class=HTMLResponse)

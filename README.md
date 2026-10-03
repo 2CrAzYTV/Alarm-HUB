@@ -79,6 +79,7 @@ REGISTRATION_INVITE_CODE=<secret> # required for invite
 ADMIN_EMAILS=you@example.com      # comma-separated, empty disables /admin
 LOGIN_MAX_FAILURES=5              # per IP, twice this value per account
 LOGIN_LOCKOUT_SECONDS=900
+PUBLIC_BASE_URL=https://alarm.example.com # address shown in the smartphone guides
 ```
 
 With the default `REGISTRATION_MODE=open` anyone who can reach the instance can create an account, so use `invite` or `closed` for a publicly reachable deployment. Accounts listed in `ADMIN_EMAILS` get an **Administration** page at `/admin` to view, edit, lock, unlock and delete accounts, set passwords, revoke tokens, clear login lockouts and change the registration mode and invite code at runtime (stored in the database, takes precedence over the environment variables). The lockout counter lives in memory and is reset by a container restart.
