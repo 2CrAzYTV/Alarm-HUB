@@ -829,7 +829,7 @@ def create_device(request: Request, name: str = Form(...), csrf: str = Form(...)
     raw = secrets.token_urlsafe(40)
     db.add(DeviceToken(user_id=user.id, name=name.strip()[:120] or "Gerät", token_hash=hashlib.sha256(raw.encode()).hexdigest()))
     db.commit()
-    body = f"<section><h2>Geräte-Token erstellt</h2><p>Dieses Token wird nur jetzt angezeigt:</p><p><code>{raw}</code></p><p>Nutze es als <code>Authorization: Bearer …</code> für <code>/api/v1/me/upcoming</code>.</p><a href='/devices'>Zurück</a></section>"
+    body = f"<section><h2>Geräte-Token erstellt</h2><p>Dieses Token wird nur jetzt angezeigt:</p><p><code>{raw}</code></p><p>Nutze es als <code>Authorization: Bearer …</code> für <code>/api/v1/me/upcoming</code> (fertiger iPhone-Kurzbefehl) oder <code>/api/v1/me/next</code> (selbst gebaute Automationen, siehe <a href='/guides'>Anleitungen</a>).</p><a href='/devices'>Zurück</a></section>"
     return HTMLResponse(_layout("Geräte-Token", body, user))
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from html import escape
 
 from fastapi import Depends, Header, Request
@@ -105,8 +106,8 @@ def _wrap_platform_guides(html: str) -> str:
     return html.replace("</head>", GUIDE_DROPDOWN_CSS + "</head>")
 
 
-def _endpoint(request: Request) -> str:
-    return f"{str(request.base_url).rstrip('/')}/api/v1/me/next"
+def _endpoint(request: Request, path: str = "next") -> str:
+    return f"{str(request.base_url).rstrip('/')}/api/v1/me/{path}"
 
 
 @main.app.get("/guides", response_class=HTMLResponse)
@@ -115,6 +116,7 @@ def guides_page(
     user: main.User = Depends(main.current_user),
 ):
     endpoint = escape(_endpoint(request))
+    upcoming_endpoint = escape(_endpoint(request, "upcoming"))
     body = f"""
 <section>
   <h2>Smartphone-Wecker – ausführliche Anleitung für Anfänger</h2>
@@ -134,25 +136,33 @@ def guides_page(
 
   <div class='card'>
     <h3>Alarm-HUB API</h3>
-    <p><code>{endpoint}</code></p>
+    <p><b>Nächster Wecker</b> (für selbst gebaute Kurzbefehle und MacroDroid):<br><code>{endpoint}</code></p>
+    <p><b>Alle kommenden Wecker</b> (für den fertigen iPhone-Kurzbefehl):<br><code>{upcoming_endpoint}</code></p>
     <p>Für die Abfrage wird zusätzlich folgender HTTP-Header benötigt:</p>
     <p><code>Authorization: Bearer DEIN_TOKEN</code></p>
     <p class='muted'>Zwischen <code>Bearer</code> und dem Token steht genau ein Leerzeichen.</p>
   </div>
 
   <div class='card'>
-    <h3>Beispielantwort</h3>
+    <h3>Beispielantwort (nächster Wecker)</h3>
     <pre><code>{{
   "ok": true,
   "timezone": "Europe/Berlin",
+  "within_24h": true,
   "alarm": {{
-    "name": "Frühschicht",
+    "source": "webcomm",
+    "id": 17,
+    "name": "Frühschicht · 90 min vorher",
+    "at": "2026-08-24T04:34:00+02:00",
     "date": "24.08.2026",
     "time": "04:34",
-    "source": "webcomm"
+    "shift_start": "2026-08-24T06:04:00+02:00",
+    "service_number": "123"
   }}
 }}</code></pre>
-    <p>Für den Smartphone-Wecker sind vor allem <code>alarm.time</code> und <code>alarm.name</code> wichtig.</p>
+    <p>Für den Smartphone-Wecker sind <code>within_24h</code>, <code>alarm.time</code> und <code>alarm.name</code> wichtig. Bei manuellen Weckern fehlen <code>shift_start</code> und <code>service_number</code>.</p>
+    <p><b>Wichtig:</b> Ein Handy-Wecker kennt nur eine Uhrzeit und klingelt beim nächsten Erreichen dieser Uhrzeit. Lege den Wecker deshalb nur an, wenn <code>within_24h</code> den Wert <code>true</code> hat. Sonst würde ein Wecker, der erst übermorgen fällig ist, schon morgen klingeln.</p>
+    <p class='muted'>Diese Abfrage liefert immer nur den <b>einen</b> nächsten Wecker. Hast du bei WebComm mehrere Vorlaufzeiten (z. B. 120, 90 und 45 Minuten), kommt pro Abruf nur der früheste davon aufs Handy. Für mehrere Wecker pro Schicht nutze auf dem iPhone den fertigen Kurzbefehl oder lass deine Automation nach jedem Wecker erneut laufen.</p>
   </div>
 
   <p><b>Netzwerk-Hinweis:</b> Wenn Alarm-HUB nur im Heimnetz erreichbar ist, funktioniert die Synchronisation unterwegs nur über VPN. Für direkten Internetzugriff sollte Alarm-HUB ausschließlich über HTTPS hinter einem korrekt konfigurierten Reverse Proxy bereitgestellt werden.</p>
@@ -178,7 +188,7 @@ def guides_page(
       <li>Bestätige auf dem iPhone, dass der Kurzbefehl in der App <b>Kurzbefehle</b> geöffnet bzw. hinzugefügt werden soll.</li>
       <li>Öffne anschließend den importierten Alarm-HUB-Kurzbefehl in <b>Kurzbefehle</b>.</li>
       <li>Öffne in Alarm-HUB <a href='/devices'>Geräte / API</a> und erzeuge ein Geräte-Token, falls noch keines für dein iPhone vorhanden ist.</li>
-      <li>Trage im Kurzbefehl die Adresse deiner eigenen Alarm-HUB-Installation ein. Für diese Installation lautet der API-Endpunkt:<br><code>{endpoint}</code></li>
+      <li>Trage im Kurzbefehl die vollständige Adresse ein. Der fertige Kurzbefehl verwendet die Liste aller kommenden Wecker, für diese Installation also:<br><code>{upcoming_endpoint}</code></li>
       <li>Trage dein persönliches Geräte-Token an der dafür vorgesehenen Stelle ein. Das Token darf nicht öffentlich geteilt werden.</li>
       <li>Starte den Kurzbefehl zunächst <b>einmal manuell</b>.</li>
       <li>Erlaube erforderliche Berechtigungen für Netzwerkzugriff und die Uhr-/Wecker-Funktionen, falls iOS danach fragt.</li>
@@ -241,8 +251,9 @@ def guides_page(
     <div class='card'>
       <h3>Teil 4 – Weckerdaten auslesen</h3>
       <ol>
-        <li>Füge nach <b>Inhalte von URL abrufen</b> die Aktion <b>Wörterbuchwert abrufen</b> hinzu.</li>
-        <li>Verwende als Schlüssel <code>alarm</code>.</li>
+        <li>Füge nach <b>Inhalte von URL abrufen</b> die Aktion <b>Wörterbuchwert abrufen</b> hinzu und lies den Schlüssel <code>within_24h</code>.</li>
+        <li>Füge <b>Wenn</b> hinzu: Nur wenn der Wert <b>wahr</b> ist, geht es weiter. Andernfalls beendet der Kurzbefehl sich ohne Wecker (der nächste Wecker ist dann noch über 24 Stunden entfernt oder es gibt keinen).</li>
+        <li>Lies innerhalb von <b>Wenn</b> aus der Antwort den Schlüssel <code>alarm</code>.</li>
         <li>Aus diesem Wörterbuch liest du anschließend den Schlüssel <code>time</code>.</li>
         <li>Der Wert hat das Format <code>HH:MM</code>, z. B. <code>04:34</code>.</li>
         <li>Lies zusätzlich aus <code>alarm</code> den Schlüssel <code>name</code> aus.</li>
@@ -250,12 +261,10 @@ def guides_page(
     </div>
 
     <div class='card'>
-      <h3>Teil 5 – Uhrzeit zerlegen und Wecker erstellen</h3>
+      <h3>Teil 5 – Wecker erstellen</h3>
       <ol>
-        <li>Teile den Wert aus <code>time</code> mit <b>Text teilen</b> am Doppelpunkt <code>:</code>.</li>
-        <li>Element 1 ist die Stunde, Element 2 die Minute.</li>
-        <li>Füge die Uhr-/Wecker-Aktion zum Erstellen eines neuen Weckers hinzu.</li>
-        <li>Verwende Stunde und Minute aus den zuvor gelesenen Werten.</li>
+        <li>Füge (noch innerhalb von <b>Wenn</b>) die Aktion <b>Wecker erstellen</b> aus der App <b>Uhr</b> hinzu.</li>
+        <li>Setze als Uhrzeit den Wert aus <code>time</code>. Verlangt deine iOS-Version Stunde und Minute getrennt, teile <code>time</code> vorher mit <b>Text teilen</b> am Doppelpunkt <code>:</code> (Element 1 = Stunde, Element 2 = Minute).</li>
         <li>Als Bezeichnung kannst du <b>Alarm-HUB –</b> gefolgt von <code>name</code> verwenden.</li>
         <li>Führe den Kurzbefehl erneut aus und kontrolliere den Wecker in der Apple-Uhr-App.</li>
       </ol>
@@ -313,7 +322,7 @@ def guides_page(
       <li>Öffne anschließend Alarm-HUB → <a href='/devices'>Geräte / API</a>.</li>
       <li>Beim Android-Token sollte <b>zuletzt benutzt</b> eine aktuelle Zeit anzeigen.</li>
       <li>Wenn MacroDroid einen HTTP-Status anzeigt, sollte Alarm-HUB mit <b>200</b> antworten.</li>
-      <li>Ein Fehler <b>401</b> weist normalerweise auf ein falsches Token oder einen falschen Authorization-Header hin.</li>
+      <li>Ein Fehler <b>401</b> weist normalerweise auf ein falsches Token oder einen falschen Authorization-Header hin, ein Fehler <b>403</b> auf ein gesperrtes Konto.</li>
     </ol>
   </div>
 
@@ -321,6 +330,7 @@ def guides_page(
     <h3>Teil 5 – JSON-Daten lesen</h3>
     <ol>
       <li>Die HTTP-Antwort enthält JSON.</li>
+      <li>Lies <code>within_24h</code> aus. Ist der Wert nicht <code>true</code>, beende das Makro ohne neuen Wecker (z. B. mit einer <b>Wenn/Sonst</b>-Bedingung). Der nächste Wecker ist dann noch über 24 Stunden entfernt oder es gibt keinen. Ohne diese Prüfung würde ein Wecker für übermorgen schon morgen klingeln.</li>
       <li>Lies <code>alarm.time</code> aus und speichere den Wert z. B. in <code>alarm_time</code>.</li>
       <li>Lies <code>alarm.name</code> aus und speichere den Wert z. B. in <code>alarm_name</code>.</li>
       <li>Wenn <code>alarm</code> den Wert <code>null</code> hat, gibt es aktuell keinen kommenden Wecker. Beende das Makro dann ohne neuen Wecker.</li>
@@ -407,6 +417,14 @@ def guides_page(
     <p>Erzeuge unter <a href='/devices'>Geräte / API</a> bei Bedarf ein neues Token und trage es erneut ein. Achte auf das Leerzeichen nach <code>Bearer</code>.</p>
   </div>
   <div class='card'>
+    <h3>HTTP 403 / Konto gesperrt</h3>
+    <p>Dein Konto wurde von einem Administrator gesperrt. Das Token ist dann ungültig, bis das Konto wieder entsperrt wird. Wende dich an den Betreiber dieser Alarm-HUB-Installation.</p>
+  </div>
+  <div class='card'>
+    <h3>Der Wecker klingelt am falschen Tag</h3>
+    <p>Ein selbst gebauter Kurzbefehl oder ein MacroDroid-Makro hat den Wecker angelegt, ohne <code>within_24h</code> zu prüfen. Ergänze die Prüfung wie oben beschrieben und lösche den falschen Wecker in der Uhr-App.</p>
+  </div>
+  <div class='card'>
     <h3>Die API funktioniert, aber kein Wecker wird erstellt</h3>
     <p>Prüfe, ob <code>alarm.time</code> korrekt gelesen wird und ob Kurzbefehle bzw. MacroDroid die nötige Berechtigung zum Erstellen von Weckern besitzen.</p>
   </div>
@@ -431,8 +449,13 @@ def next_alarm_api(
     else:
         user = main.current_user(request, db)
     alarms = main._upcoming(user, db, 1)
+    alarm = alarms[0] if alarms else None
+    # Phone alarms only know a time of day and always ring at its next occurrence,
+    # so clients must skip alarms that are more than 24 hours away.
+    within_24h = bool(alarm) and datetime.fromisoformat(alarm["at"]) - datetime.now(timezone.utc) <= timedelta(hours=24)
     return {
         "ok": True,
         "timezone": user.timezone,
-        "alarm": alarms[0] if alarms else None,
+        "within_24h": within_24h,
+        "alarm": alarm,
     }
