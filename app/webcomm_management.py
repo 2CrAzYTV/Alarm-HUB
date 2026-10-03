@@ -54,7 +54,7 @@ async def _run_scheduled_imports() -> None:
         for schedule in schedules:
             user = db.get(main.User, schedule.user_id)
             cred = db.scalar(select(dw.DirectWebCommCredential).where(dw.DirectWebCommCredential.user_id == schedule.user_id))
-            if not user or not cred or not _window_open(schedule, user.timezone):
+            if not user or user.disabled_at or not cred or not _window_open(schedule, user.timezone):
                 continue
             if cred.last_sync_at and (now - cred.last_sync_at.astimezone(timezone.utc)).total_seconds() < max(5, schedule.interval_minutes) * 60:
                 continue
