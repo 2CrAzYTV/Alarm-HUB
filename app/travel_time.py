@@ -19,6 +19,10 @@ from . import main
 
 ORS_API_KEY = os.getenv("OPENROUTESERVICE_API_KEY", "").strip()
 TRANSITOUS_API_BASE = os.getenv("TRANSITOUS_API_BASE", "https://api.transitous.org/api").rstrip("/")
+# Upper bound for all routing calls of one upcoming-alarms computation. Once it
+# is used up, the remaining alarms are returned without commute time instead of
+# letting a slow routing API stall the dashboard and the smartphone endpoints.
+COMMUTE_BUDGET_SECONDS = float(os.getenv("COMMUTE_BUDGET_SECONDS", "3"))
 
 TRANSPORT_LABELS = {
     "car": "Auto",
@@ -28,6 +32,13 @@ TRANSPORT_LABELS = {
 
 _cache_lock = threading.Lock()
 _cache: dict[str, tuple[float, object]] = {}
+# Distinguishes a cache miss from a cached negative result (None).
+_MISS = object()
+_budget = threading.local()
+
+
+class _BudgetExceeded(Exception):
+    """The routing time budget of the current request is used up."""
 
 
 def _cache_get(key: str):
@@ -35,11 +46,11 @@ def _cache_get(key: str):
     with _cache_lock:
         item = _cache.get(key)
         if not item:
-            return None
+            return _MISS
         expires, value = item
         if expires <= now:
             _cache.pop(key, None)
-            return None
+            return _MISS
         return value
 
 
@@ -55,6 +66,12 @@ def _json_request(
     payload: dict | None = None,
     timeout: float = 7.0,
 ) -> dict:
+    deadline = getattr(_budget, "deadline", None)
+    if deadline is not None:
+        remaining = deadline - time_module.monotonic()
+        if remaining <= 0:
+            raise _BudgetExceeded()
+        timeout = min(timeout, remaining)
     body = None
     merged_headers = {
         "Accept": "application/json",
@@ -71,8 +88,15 @@ def _json_request(
         headers=merged_headers,
         method="POST" if body is not None else "GET",
     )
-    with urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        # A call cut short by the budget is no routing failure and must not be
+        # cached as one.
+        if deadline is not None and not _budget_left():
+            raise _BudgetExceeded() from exc
+        raise
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
@@ -91,7 +115,7 @@ def _ors_geocode(address: str) -> tuple[float, float] | None:
         return None
     key = f"ors-geocode:{address.strip().casefold()}"
     cached = _cache_get(key)
-    if cached is not None:
+    if cached is not _MISS:
         return cached
 
     query = urlencode({"text": address.strip(), "size": 1})
@@ -102,9 +126,11 @@ def _ors_geocode(address: str) -> tuple[float, float] | None:
         )
         coordinates = data["features"][0]["geometry"]["coordinates"]
         result = (float(coordinates[0]), float(coordinates[1]))
+    except _BudgetExceeded:
+        return None
     except Exception:
         result = None
-    _cache_set(key, result, 24 * 60 * 60)
+    _cache_set(key, result, 24 * 60 * 60 if result is not None else 15 * 60)
     return result
 
 
@@ -114,13 +140,14 @@ def _ors_duration_minutes(origin: str, destination: str, mode: str) -> int | Non
 
     key = f"ors-route:{mode}:{origin.strip().casefold()}:{destination.strip().casefold()}"
     cached = _cache_get(key)
-    if cached is not None:
+    if cached is not _MISS:
         return cached
 
     start = _ors_geocode(origin)
     end = _ors_geocode(destination)
     if not start or not end:
-        _cache_set(key, None, 15 * 60)
+        if _budget_left():
+            _cache_set(key, None, 15 * 60)
         return None
 
     profile = "driving-car" if mode == "car" else "cycling-regular"
@@ -132,6 +159,8 @@ def _ors_duration_minutes(origin: str, destination: str, mode: str) -> int | Non
         )
         seconds = float(data["routes"][0]["summary"]["duration"])
         result = max(1, math.ceil(seconds / 60.0))
+    except _BudgetExceeded:
+        return None
     except Exception:
         result = None
     _cache_set(key, result, 12 * 60 * 60 if result is not None else 15 * 60)
@@ -157,7 +186,7 @@ def _transitous_departure(
         f"{arrival_utc.strftime('%Y-%m-%dT%H:%M')}"
     )
     cached = _cache_get(cache_key)
-    if cached is not None:
+    if cached is not _MISS:
         return cached
 
     params = {
@@ -202,11 +231,18 @@ def _transitous_departure(
                 departure,
                 max(1, math.ceil(duration_seconds / 60.0)),
             )
+    except _BudgetExceeded:
+        return None
     except Exception:
         result = None
 
     _cache_set(cache_key, result, 30 * 60 if result is not None else 10 * 60)
     return result
+
+
+def _budget_left() -> bool:
+    deadline = getattr(_budget, "deadline", None)
+    return deadline is None or time_module.monotonic() < deadline
 
 
 def _commute_for_shift(
@@ -248,6 +284,14 @@ def _commute_for_shift(
 
 
 def upcoming_with_commute(user: main.User, db: Session, limit: int = 50) -> list[dict]:
+    _budget.deadline = time_module.monotonic() + COMMUTE_BUDGET_SECONDS
+    try:
+        return _upcoming_with_commute(user, db, limit)
+    finally:
+        _budget.deadline = None
+
+
+def _upcoming_with_commute(user: main.User, db: Session, limit: int) -> list[dict]:
     tz = ZoneInfo(user.timezone or main.DEFAULT_TZ)
     now = datetime.now(tz)
     items: list[dict] = []
